@@ -4,9 +4,12 @@
 并返回调用方 DID。
 """
 
+import asyncio
 import logging
+import os
 from pathlib import Path
 
+from anp.authentication import did_wba_verifier as did_wba_verifier_module
 from anp.authentication.did_wba_verifier import (
     DidWbaVerifier,
     DidWbaVerifierConfig,
@@ -18,6 +21,9 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from identity import ANPIdentity
 
 logger = logging.getLogger(__name__)
+
+# DID 文档解析默认超时（秒）
+_DEFAULT_DID_RESOLVE_TIMEOUT = 10
 
 # JWT 密钥文件名
 _JWT_PRIVATE_KEY_NAME = "jwt_private_key.pem"
@@ -54,6 +60,34 @@ class ANPAuth:
             require_nonce_for_http_signatures=True,
         )
         self._verifier = DidWbaVerifier(config)
+        self._did_resolve_timeout = float(
+            os.environ.get("ANP_DID_RESOLVE_TIMEOUT", _DEFAULT_DID_RESOLVE_TIMEOUT)
+        )
+        self._patch_resolver_with_timeout()
+
+    def _patch_resolver_with_timeout(self) -> None:
+        """为 DID 文档解析添加可配置超时。
+
+        ANP SDK 的 `resolve_did_wba_document` 已有 10 秒默认超时，但无法通过配置调整。
+        这里包装模块级 resolver，使其支持 `ANP_DID_RESOLVE_TIMEOUT` 环境变量。
+        """
+        original_resolver = did_wba_verifier_module.resolve_did_wba_document
+        timeout = self._did_resolve_timeout
+
+        async def _resolver_with_timeout(did: str, verify_proof: bool = False):
+            try:
+                return await asyncio.wait_for(
+                    original_resolver(did, verify_proof=verify_proof),
+                    timeout=timeout,
+                )
+            except asyncio.TimeoutError as exc:
+                raise DidWbaVerifierError(
+                    "Failed to resolve DID document: timeout",
+                    status_code=401,
+                ) from exc
+
+        did_wba_verifier_module.resolve_did_wba_document = _resolver_with_timeout
+        logger.debug("DID 文档解析超时已设置为 %.1f 秒", timeout)
 
     async def authenticate(
         self,

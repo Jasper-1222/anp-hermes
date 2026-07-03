@@ -1,5 +1,6 @@
 """ANP 插件服务端认证模块测试。"""
 
+import asyncio
 import json
 import os
 import sys
@@ -46,7 +47,8 @@ def caller_identity(tmp_path: Path) -> dict:
         did_profile="e1",
     )
     did = did_document["id"]
-    auth_key = keys.get("key-1") or next(iter(keys.values()))
+    auth_key = keys.get("key-1")
+    assert auth_key is not None, "DID 文档未生成 key-1 认证密钥"
     private_key_pem = auth_key[0]
 
     did_path = workdir / "did.json"
@@ -162,8 +164,7 @@ async def test_invalid_signature_raises(auth, caller_identity: dict) -> None:
     body = json.dumps({"jsonrpc": "2.0", "method": "chat", "params": {}, "id": "1"})
     headers = await _build_signed_headers(caller_identity, target_url, body)
 
-    # 篡改签名内容
-    headers["Signature"] = headers["Signature"][:-4] + "XXXX"
+    headers["Signature"] = "sig1=:invalid_signature:"
 
     with pytest.raises(AuthenticationError):
         await auth.authenticate("POST", target_url, headers, body)
@@ -193,3 +194,37 @@ async def test_unresolvable_did_raises(identity: ANPIdentity) -> None:
             )
     finally:
         did_wba_verifier_module.resolve_did_wba_document = original_resolver
+
+
+@pytest.mark.asyncio
+async def test_did_resolution_timeout_returns_unresolvable_error(
+    identity: ANPIdentity,
+) -> None:
+    """DID 文档解析超时应映射为 DID 无法解析错误（-32002）。"""
+    original_resolver = resolve_did_wba_document
+
+    async def _hanging_resolver(did: str, verify_proof: bool = False):
+        await asyncio.sleep(5)
+        return {}
+
+    did_wba_verifier_module.resolve_did_wba_document = _hanging_resolver
+    os.environ["ANP_DID_RESOLVE_TIMEOUT"] = "0.1"
+
+    try:
+        auth = create_auth(identity)
+        with pytest.raises(AuthenticationError) as exc_info:
+            await auth.authenticate(
+                "POST",
+                "http://localhost:8900/agent/rpc",
+                {
+                    "Signature-Input": 'sig1=("@method");created=1;keyid="did:wba:localhost:agent:e1_x#key-1"',
+                    "Signature": "sig1=:AAAA:",
+                },
+                None,
+            )
+        cause = exc_info.value.__cause__
+        assert cause is not None
+        assert "resolve" in str(cause).lower() or "timeout" in str(cause).lower()
+    finally:
+        did_wba_verifier_module.resolve_did_wba_document = original_resolver
+        os.environ.pop("ANP_DID_RESOLVE_TIMEOUT", None)
