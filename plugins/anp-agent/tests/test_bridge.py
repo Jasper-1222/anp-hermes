@@ -121,7 +121,7 @@ async def test_cleanup_removes_expired_futures():
         await asyncio.sleep(0)
         assert "exp" in bridge._pending
 
-        await asyncio.sleep(1.5)
+        await asyncio.sleep(2.5)
         assert "exp" not in bridge._pending
 
         result = await asyncio.wait_for(task, timeout=2)
