@@ -1,0 +1,14 @@
+name: anp-agent
+version: 0.1.0
+description: "ANP（Agent Network Protocol）服务智能体 Hermes 平台插件。提供 did:wba 身份、DID WBA HTTP Message Signature 认证、OpenRPC 接口描述与 JSON-RPC 调用桥接，使 Hermes 能被其他 ANP 智能体发现与调用。"
+author: ANP Hermes Contributors
+kind: backend
+required_env:
+  - ANP_HOST
+  - ANP_PORT
+  - ANP_HOSTNAME
+  - ANP_ENDPOINT
+  - ANP_DATA_DIR
+  - ANP_REQUEST_TIMEOUT
+  - ANP_FUTURE_TTL
+  - ANP_ALLOW_ALL_USERS

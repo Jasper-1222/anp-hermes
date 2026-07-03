@@ -14,6 +14,7 @@ from auth import create_auth
 from bridge import ANPBridge
 from config import load_config
 from identity import load_or_create_identity
+from server import create_app
 
 
 logger = logging.getLogger(__name__)
@@ -60,8 +61,13 @@ class ANPAdapter(BasePlatformAdapter):
             message_handler=self.handle_message,
         )
 
-        # 启动 aiohttp 服务器（具体路由在 T7/T8 中实现）
-        self._app = web.Application()
+        # 启动 aiohttp 服务器
+        self._app = create_app(
+            config=self._anp_config,
+            identity=self._identity,
+            auth=self._auth,
+            bridge=self._bridge,
+        )
         self._runner = web.AppRunner(self._app)
         await self._runner.setup()
         site = web.TCPSite(
