@@ -108,15 +108,18 @@ def _build_openrpc_json(config: ANPConfig) -> dict[str, Any]:
             {
                 "name": "chat",
                 "summary": "与 Hermes 智能体进行单轮文本对话",
+                "description": "与 Hermes 智能体进行单轮文本对话，接收 message 参数并返回 response 文本。",
                 "params": [
                     {
                         "name": "message",
+                        "description": "用户输入的文本消息",
                         "schema": {"type": "string"},
                         "required": True,
                     }
                 ],
                 "result": {
                     "name": "response",
+                    "description": "Hermes 智能体生成的回复文本",
                     "schema": {"type": "string"},
                 },
             }
