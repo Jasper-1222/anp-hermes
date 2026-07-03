@@ -20,6 +20,7 @@ class ANPIdentity:
     did: str
     did_document: dict[str, Any]
     private_key_pem: bytes
+    data_dir: Path
 
 
 # 默认路径名
@@ -94,6 +95,7 @@ def _generate_identity(data_dir: Path, hostname: str) -> ANPIdentity:
         did=did,
         did_document=did_document,
         private_key_pem=private_key_pem,
+        data_dir=data_dir,
     )
 
 
@@ -124,6 +126,7 @@ def _load_identity(data_dir: Path, hostname: str) -> ANPIdentity:
         did=did,
         did_document=did_document,
         private_key_pem=private_key_pem,
+        data_dir=data_dir,
     )
 
 
