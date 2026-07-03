@@ -61,9 +61,7 @@ def load_config(platform_config) -> ANPConfig:
     host = _get_str(extra, "ANP_HOST", "host", constants.DEFAULT_HOST)
     port = _get_int(extra, "ANP_PORT", "port", constants.DEFAULT_PORT)
     hostname = _get_str(extra, "ANP_HOSTNAME", "hostname", constants.DEFAULT_HOSTNAME)
-    data_dir = _get_path(
-        extra, "ANP_DATA_DIR", "data_dir", constants.DEFAULT_DATA_DIR
-    )
+    data_dir = _get_path(extra, "ANP_DATA_DIR", "data_dir", constants.DEFAULT_DATA_DIR)
 
     endpoint = _get_str(extra, "ANP_ENDPOINT", "endpoint", "")
     if not endpoint:
@@ -72,9 +70,7 @@ def load_config(platform_config) -> ANPConfig:
     request_timeout = _get_int(
         extra, "ANP_REQUEST_TIMEOUT", "request_timeout", constants.DEFAULT_REQUEST_TIMEOUT
     )
-    future_ttl = _get_int(
-        extra, "ANP_FUTURE_TTL", "future_ttl", constants.DEFAULT_FUTURE_TTL
-    )
+    future_ttl = _get_int(extra, "ANP_FUTURE_TTL", "future_ttl", constants.DEFAULT_FUTURE_TTL)
 
     return ANPConfig(
         host=host,

@@ -16,7 +16,6 @@ from config import load_config
 from identity import load_or_create_identity
 from server import create_app
 
-
 logger = logging.getLogger(__name__)
 
 

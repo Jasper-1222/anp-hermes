@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import pytest_asyncio
-from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 # 插件目录名包含连字符，无法作为 Python 包导入，因此将插件根目录加入搜索路径
@@ -69,9 +68,7 @@ async def client(
 
 
 @pytest.mark.asyncio
-async def test_get_ad_json_returns_required_fields(
-    client: TestClient, identity: ANPIdentity
-):
+async def test_get_ad_json_returns_required_fields(client: TestClient, identity: ANPIdentity):
     """GET /agent/ad.json 返回合法 JSON 且包含必要字段。"""
     resp = await client.get("/agent/ad.json")
     assert resp.status == 200
@@ -161,9 +158,7 @@ async def test_post_rpc_auth_failure_returns_401_and_minus_32001(
     mock_auth: MagicMock,
 ):
     """认证失败返回 HTTP 401 与 JSON-RPC -32001。"""
-    mock_auth.authenticate = AsyncMock(
-        side_effect=AuthenticationError("认证失败")
-    )
+    mock_auth.authenticate = AsyncMock(side_effect=AuthenticationError("认证失败"))
 
     payload = {
         "jsonrpc": "2.0",

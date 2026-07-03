@@ -8,7 +8,7 @@ from types import SimpleNamespace
 # 插件目录名包含连字符，无法作为 Python 包导入，因此将插件根目录加入搜索路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import load_config, ANPConfig
+from config import ANPConfig, load_config
 
 
 def _platform_config(extra=None):

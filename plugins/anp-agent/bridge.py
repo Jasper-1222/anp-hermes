@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from config import ANPConfig
 
@@ -154,9 +155,7 @@ class ANPBridge:
             return "内部错误：无法将请求提交给 Hermes"
 
         try:
-            result = await asyncio.wait_for(
-                future, timeout=self._config.request_timeout
-            )
+            result = await asyncio.wait_for(future, timeout=self._config.request_timeout)
             return result
         except asyncio.TimeoutError:
             logger.warning("rpc_id=%s 等待结果超时", rpc_id)

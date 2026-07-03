@@ -111,9 +111,7 @@ async def auth(identity: ANPIdentity, did_server: str):
     did_wba_verifier_module.resolve_did_wba_document = original_resolver
 
 
-async def _build_signed_headers(
-    caller_identity: dict, target_url: str, body: str
-) -> dict:
+async def _build_signed_headers(caller_identity: dict, target_url: str, body: str) -> dict:
     """使用 DIDWbaAuthHeader 生成合法签名头。"""
     auth = DIDWbaAuthHeader(
         did_document_path=str(caller_identity["did_path"]),
@@ -132,9 +130,7 @@ async def _build_signed_headers(
 
 
 @pytest.mark.asyncio
-async def test_valid_signature_returns_caller_did(
-    auth, caller_identity: dict
-) -> None:
+async def test_valid_signature_returns_caller_did(auth, caller_identity: dict) -> None:
     """合法签名请求应返回正确的调用方 DID。"""
     target_url = "http://localhost:8900/agent/rpc"
     body = json.dumps({"jsonrpc": "2.0", "method": "chat", "params": {}, "id": "1"})

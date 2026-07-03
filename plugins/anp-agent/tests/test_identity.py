@@ -12,7 +12,6 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from identity import (
-    ANPIdentity,
     _is_valid_did,
     load_or_create_identity,
 )
