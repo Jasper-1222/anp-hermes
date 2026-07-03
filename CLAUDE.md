@@ -54,6 +54,14 @@ openspec status --change create-anp-hermes-plugin
     └── skills/
 ```
 
+## 本地开发环境
+
+- **Hermes 源码**：`/home/peter/hermes-agent`
+  - 实现插件时需要参考 `BasePlatformAdapter`、`MessageEvent`、`platform_registry`、`ctx.register_platform()` 等契约。
+  - 插件代码必须零侵入 Hermes 核心，仅通过公开/稳定的插件接口与 Hermes 交互。
+- **Hermes 程序**：本地已安装，并保持为最新版本。
+  - 可用于 E2E 验证：启动 gateway 并加载 `anp-agent` 插件。
+
 ## 架构概览
 
 ```
