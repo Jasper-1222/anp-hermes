@@ -58,9 +58,12 @@ class DIDDocumentServer:
 
         actual_port = self._port
         if actual_port == 0:
-            # site._server 在 start 后必然存在
-            server_socket = site._server.sockets[0]  # type: ignore[union-attr]
-            actual_port = server_socket.getsockname()[1]
+            # 使用 AppRunner.addresses 公开 API 获取动态端口
+            addresses = self._runner.addresses
+            if addresses:
+                actual_port = addresses[0][1]
+            else:
+                raise RuntimeError("DID 文档服务器未能绑定到可用端口")
 
         self._base_url = f"http://{self._host}:{actual_port}"
         return self._base_url

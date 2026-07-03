@@ -73,7 +73,9 @@ def load_config(platform_config) -> ANPConfig:
         "request_timeout",
         constants.DEFAULT_REQUEST_TIMEOUT,
     )
-    future_ttl = _get_int(extra, "ANP_FUTURE_TTL", "future_ttl", constants.DEFAULT_FUTURE_TTL)
+    future_ttl = _get_int(
+        extra, "ANP_FUTURE_TTL", "future_ttl", constants.DEFAULT_FUTURE_TTL
+    )
 
     return ANPConfig(
         host=host,

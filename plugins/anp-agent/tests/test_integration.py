@@ -67,7 +67,8 @@ def caller_identity(tmp_path: Path):
         did_profile="e1",
     )
     did = did_document["id"]
-    auth_key = keys.get("key-1") or next(iter(keys.values()))
+    auth_key = keys.get("key-1")
+    assert auth_key is not None, "DID 文档未生成 key-1 认证密钥"
     private_key_pem = auth_key[0]
 
     did_path = workdir / "did.json"
@@ -180,7 +181,12 @@ async def test_rpc_with_valid_signature_returns_result(anp_app, caller_identity)
 
     target_url = f"{endpoint}/agent/rpc"
     body = json.dumps(
-        {"jsonrpc": "2.0", "method": "chat", "params": {"message": "你好"}, "id": "integ-1"}
+        {
+            "jsonrpc": "2.0",
+            "method": "chat",
+            "params": {"message": "你好"},
+            "id": "integ-1",
+        }
     )
     headers = await _build_signed_headers(caller_identity, target_url, body)
 
@@ -205,10 +211,16 @@ async def test_rpc_with_invalid_signature_returns_401(anp_app, caller_identity):
 
     target_url = f"{endpoint}/agent/rpc"
     body = json.dumps(
-        {"jsonrpc": "2.0", "method": "chat", "params": {"message": "你好"}, "id": "integ-2"}
+        {
+            "jsonrpc": "2.0",
+            "method": "chat",
+            "params": {"message": "你好"},
+            "id": "integ-2",
+        }
     )
     headers = await _build_signed_headers(caller_identity, target_url, body)
-    headers["Signature"] = headers["Signature"][:-4] + "XXXX"
+    # 用固定无效字符串替换整个 Signature，避免假设原字符串长度
+    headers["Signature"] = "sig1=:invalid_signature:"
 
     resp = await client.post("/agent/rpc", data=body, headers=headers)
 
@@ -224,7 +236,12 @@ async def test_rpc_without_signature_returns_401(anp_app):
     client: TestClient = anp_app["client"]
 
     body = json.dumps(
-        {"jsonrpc": "2.0", "method": "chat", "params": {"message": "你好"}, "id": "integ-3"}
+        {
+            "jsonrpc": "2.0",
+            "method": "chat",
+            "params": {"message": "你好"},
+            "id": "integ-3",
+        }
     )
 
     resp = await client.post("/agent/rpc", data=body, headers={"Content-Type": "application/json"})

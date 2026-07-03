@@ -111,7 +111,9 @@ async def auth(identity: ANPIdentity, did_server: str):
     did_wba_verifier_module.resolve_did_wba_document = original_resolver
 
 
-async def _build_signed_headers(caller_identity: dict, target_url: str, body: str) -> dict:
+async def _build_signed_headers(
+    caller_identity: dict, target_url: str, body: str
+) -> dict:
     """使用 DIDWbaAuthHeader 生成合法签名头。"""
     auth = DIDWbaAuthHeader(
         did_document_path=str(caller_identity["did_path"]),
