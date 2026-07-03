@@ -41,3 +41,8 @@ Thumbs.db
 *.log
 .anp-data/
 .worktrees/
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

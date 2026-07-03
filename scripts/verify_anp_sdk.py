@@ -41,10 +41,14 @@ def _generate_jwt_keys():
         format=serialization.PrivateFormat.PKCS8,
         encryption_algorithm=serialization.NoEncryption(),
     ).decode("utf-8")
-    public_pem = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.PEM,
-        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-    ).decode("utf-8")
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
     return private_pem, public_pem
 
 
@@ -116,7 +120,9 @@ async def _main():
             auth_mode="http_signatures",
         )
         target_url = "http://127.0.0.1:8765/agent/rpc"
-        body = json.dumps({"jsonrpc": "2.0", "method": "chat", "params": {"message": "hi"}, "id": "1"})
+        body = json.dumps(
+            {"jsonrpc": "2.0", "method": "chat", "params": {"message": "hi"}, "id": "1"}
+        )
         headers = auth.get_auth_header(
             server_url=target_url,
             method="POST",
@@ -135,7 +141,9 @@ async def _main():
         # base_url_override。在测试环境中通过 monkey-patch 让它从本地服务器解析。
         original_resolve_did_wba_document = resolve_did_wba_document
 
-        async def _patched_resolve_did_wba_document(did: str, verify_proof: bool = False):
+        async def _patched_resolve_did_wba_document(
+            did: str, verify_proof: bool = False
+        ):
             return await resolve_did_document(
                 did,
                 base_url_override="http://127.0.0.1:8765",
@@ -161,11 +169,15 @@ async def _main():
                 domain="localhost",
             )
             assert result["did"] == caller_did, "验证结果 DID 不匹配"
-            assert result["auth_scheme"] == "http_signatures", "认证方案应为 http_signatures"
+            assert (
+                result["auth_scheme"] == "http_signatures"
+            ), "认证方案应为 http_signatures"
             assert "access_token" in result, "应返回 access_token"
             logger.info("DidWbaVerifier 验证成功，返回 access_token")
         finally:
-            did_wba_verifier.resolve_did_wba_document = original_resolve_did_wba_document
+            did_wba_verifier.resolve_did_wba_document = (
+                original_resolve_did_wba_document
+            )
 
         # ------------------------------------------------------------------
         # 6. 验证 Bearer token
