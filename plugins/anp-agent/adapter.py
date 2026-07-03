@@ -70,11 +70,9 @@ class ANPAdapter(BasePlatformAdapter):
             port=self._anp_config.port,
         )
         await site.start()
-        logger.info(
-            "ANP 适配器已启动监听 %s:%s",
-            self._anp_config.host,
-            self._anp_config.port,
-        )
+        # 获取实际绑定的地址，port=0 时尤其需要
+        addresses = [f"{addr[0]}:{addr[1]}" for addr in self._runner.addresses]
+        logger.info("ANP 适配器已启动监听 %s", addresses or "unknown")
 
         # 启动桥接器后台任务
         await self._bridge.start()
@@ -102,12 +100,15 @@ class ANPAdapter(BasePlatformAdapter):
         """向指定 chat_id 发送消息。
 
         本适配器仅处理以 "anp:" 为前缀的 chat_id，用于将 Hermes 回复写回 RPC Future。
+        当前阶段忽略 reply_to 与 metadata（ANP JSON-RPC 单轮调用无需回复特定消息）。
         """
-        if chat_id.startswith("anp:") and self._bridge is not None:
-            rpc_id = chat_id[4:]
-            self._bridge.set_result(rpc_id, content)
-            return SendResult(success=True, message_id=rpc_id)
-        return SendResult(success=False, error="unknown chat_id")
+        if not chat_id.startswith("anp:"):
+            return SendResult(success=False, error="unknown chat_id")
+        if self._bridge is None:
+            return SendResult(success=False, error="adapter not connected")
+        rpc_id = chat_id[4:]
+        self._bridge.set_result(rpc_id, content)
+        return SendResult(success=True, message_id=rpc_id)
 
     async def get_chat_info(self, chat_id) -> dict[str, Any]:
         """返回 chat 基本信息。"""

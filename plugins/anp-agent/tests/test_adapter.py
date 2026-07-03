@@ -78,13 +78,13 @@ from adapter import ANPAdapter
 from config import ANPConfig
 
 
-def _config(**kwargs):
+def _config(data_dir, **kwargs):
     defaults = {
         "host": "127.0.0.1",
         "port": 0,
         "hostname": "localhost",
         "endpoint": "http://localhost:0",
-        "data_dir": "/tmp/anp-test-adapter",
+        "data_dir": str(data_dir),
         "request_timeout": 1,
         "future_ttl": 2,
     }
@@ -93,11 +93,16 @@ def _config(**kwargs):
 
 
 @pytest.fixture
-def platform_config():
+def platform_config(tmp_path):
     class PlatformConfig:
-        extra = {}
+        extra = {"data_dir": str(tmp_path / "adapter")}
 
     return PlatformConfig()
+
+
+@pytest.fixture
+def anp_config(tmp_path):
+    return _config(tmp_path / "adapter")
 
 
 @pytest.fixture
@@ -145,6 +150,14 @@ async def test_disconnect_sets_disconnected(
     assert adapter.is_connected is True
     await adapter.disconnect()
     assert adapter.is_connected is False
+
+
+@pytest.mark.asyncio
+async def test_send_anp_chat_id_returns_failure_when_not_connected(platform_config):
+    adapter = ANPAdapter(platform_config)
+    result = await adapter.send("anp:rpc-1", "reply content")
+    assert result.success is False
+    assert result.error == "adapter not connected"
 
 
 @pytest.mark.asyncio
