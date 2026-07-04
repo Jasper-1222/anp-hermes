@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 # DID 文档解析默认超时（秒）
 _DEFAULT_DID_RESOLVE_TIMEOUT = 10
 
+# DID 文档解析 base URL 环境变量名
+_DID_RESOLVER_BASE_URL_ENV = "ANP_DID_RESOLVER_BASE_URL"
+
 # JWT 密钥文件名
 _JWT_PRIVATE_KEY_NAME = "jwt_private_key.pem"
 _JWT_PUBLIC_KEY_NAME = "jwt_public_key.pem"
@@ -67,37 +70,57 @@ class ANPAuth:
         self._did_resolve_timeout = float(
             os.environ.get("ANP_DID_RESOLVE_TIMEOUT", _DEFAULT_DID_RESOLVE_TIMEOUT)
         )
-        self._patch_resolver_with_timeout()
+        self._did_resolver_base_url = os.environ.get(_DID_RESOLVER_BASE_URL_ENV)
+        self._patch_resolver()
 
-    def _patch_resolver_with_timeout(self) -> None:
-        """为 DID 文档解析添加可配置超时。
+    def _patch_resolver(self) -> None:
+        """包装 DID 文档解析函数，支持超时与 base URL 覆盖。
 
-        ANP SDK 的 `resolve_did_wba_document` 已有 10 秒默认超时，但无法通过配置调整。
-        这里包装模块级 resolver，使其支持 `ANP_DID_RESOLVE_TIMEOUT` 环境变量。
+        ANP SDK 的 `resolve_did_wba_document` 默认通过 HTTPS 解析 DID 文档，
+        且不暴露自定义 resolver 接口。这里通过模块级 monkeypatch 支持：
+
+        - `ANP_DID_RESOLVE_TIMEOUT`：自定义解析超时。
+        - `ANP_DID_RESOLVER_BASE_URL`：覆盖 DID 文档 base URL（用于测试）。
 
         .. note::
             当前实现会替换模块级 resolver。若进程内存在多个 ``ANPAuth`` 实例，
             后创建的实例会覆盖前一个实例的 wrapper；测试代码也依赖同一模块函数，
-            因此不要在生产环境中同时运行多个使用不同超时的 ``ANPAuth`` 实例。
-            这是 ANP SDK 未暴露自定义 resolver 接口的权宜方案。
+            因此不要在生产环境中同时运行多个使用不同配置的 ``ANPAuth`` 实例。
         """
+        from anp.authentication.did_resolver import resolve_did_document
+
         original_resolver = did_wba_verifier_module.resolve_did_wba_document
         timeout = self._did_resolve_timeout
+        base_url = self._did_resolver_base_url
 
-        async def _resolver_with_timeout(did: str, verify_proof: bool = False):
+        async def _resolver_wrapper(did: str, verify_proof: bool = False):
             try:
-                return await asyncio.wait_for(
-                    original_resolver(did, verify_proof=verify_proof),
-                    timeout=timeout,
-                )
+                if base_url is not None:
+                    coro = resolve_did_document(
+                        did,
+                        verify_proof=verify_proof,
+                        base_url_override=base_url,
+                        verify_ssl=False,
+                    )
+                else:
+                    coro = original_resolver(did, verify_proof=verify_proof)
+                return await asyncio.wait_for(coro, timeout=timeout)
             except asyncio.TimeoutError as exc:
                 raise DidWbaVerifierError(
                     "Failed to resolve DID document: timeout",
                     status_code=401,
                 ) from exc
 
-        did_wba_verifier_module.resolve_did_wba_document = _resolver_with_timeout
-        logger.debug("DID 文档解析超时已设置为 %.1f 秒", timeout)
+        did_wba_verifier_module.resolve_did_wba_document = _resolver_wrapper
+        logger.debug(
+            "DID 文档解析超时已设置为 %.1f 秒，base_url_override=%s",
+            timeout,
+            base_url if base_url else "(none)",
+        )
+
+    def _patch_resolver_with_timeout(self) -> None:
+        """保留旧方法名作为兼容别名，实际调用 ``_patch_resolver``。"""
+        self._patch_resolver()
 
     async def authenticate(
         self,

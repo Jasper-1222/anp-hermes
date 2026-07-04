@@ -43,7 +43,7 @@ def _build_source(chat_id: str, user_id: str) -> Any:
         return None
     return SessionSource(
         platform=platform,
-        chat_id=chat_id,
+        chat_id=f"anp:{chat_id}",
         user_id=user_id,
         chat_type="dm",
     )
@@ -83,6 +83,29 @@ class MessageEvent:
                     self.message_type = MessageType.TEXT
             elif not isinstance(self.message_type, MessageType):
                 self.message_type = MessageType.TEXT
+
+    def is_command(self) -> bool:
+        """判断消息是否以命令开头。"""
+        return self.text.startswith("/")
+
+    def get_command(self) -> str | None:
+        """提取命令名（不含斜杠与参数），非命令时返回 None。"""
+        if not self.is_command():
+            return None
+        parts = self.text.split(maxsplit=1)
+        raw = parts[0][1:].lower() if parts else None
+        if raw and "@" in raw:
+            raw = raw.split("@", 1)[0]
+        if raw and "/" in raw:
+            return None
+        return raw
+
+    def get_command_args(self) -> str:
+        """返回命令后的参数文本。"""
+        if not self.is_command():
+            return self.text
+        parts = self.text.split(maxsplit=1)
+        return parts[1] if len(parts) > 1 else ""
 
 
 @dataclass

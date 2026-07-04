@@ -35,6 +35,20 @@ python -m pytest tests/test_server.py -v
 
 # 运行测试并检查覆盖率（覆盖率要求 ≥ 85%）
 python -m pytest --cov=. --cov-fail-under=85 -q
+
+# 阶段一：确定性 Echo E2E（本地 mock LLM，无需真实 API key）
+python -m pytest tests/e2e/test_echo.py -v --run-e2e
+
+# 阶段二：真实 LLM E2E（使用 ~/.hermes/config.yaml 中配置的 provider）
+# 需要配置对应 provider 的 API key 环境变量，例如 DEEPSEEK_API_KEY
+python -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
+
+# 阶段二：临时覆盖 provider（不修改 ~/.hermes/config.yaml）
+export ANP_E2E_LLM_PROVIDER="kimi"
+export ANP_E2E_LLM_API="https://api.kimi.com/coding/v1"
+export ANP_E2E_LLM_KEY_ENV="KIMI_API_KEY"
+export KIMI_API_KEY="sk-..."
+python -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
 ```
 
 ### Lint 与格式化
