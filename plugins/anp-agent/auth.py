@@ -18,7 +18,7 @@ from anp.authentication.did_wba_verifier import (
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from identity import ANPIdentity
+from identity import ANPIdentity, _atomic_write_text
 
 logger = logging.getLogger(__name__)
 
@@ -156,16 +156,10 @@ def _generate_rsa_key_pair() -> tuple[str, str]:
 def _save_key(path: Path, pem: str, *, is_private: bool) -> None:
     """保存密钥 PEM 文件，私钥 0o600，公钥 0o644。
 
-    通过 os.open 在创建时即应用权限，避免 write->chmod 竞态。
+    复用 identity._atomic_write_text，在创建时即应用权限，避免 write->chmod 竞态。
     """
     mode = _PRIVATE_KEY_MODE if is_private else _PUBLIC_KEY_MODE
-    flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC
-    fd = os.open(path, flags, mode)
-    try:
-        with os.fdopen(fd, "w", encoding="utf-8", closefd=False) as f:
-            f.write(pem)
-    finally:
-        os.close(fd)
+    _atomic_write_text(path, pem, mode)
 
 
 def _load_or_generate_jwt_keys(data_dir: Path) -> tuple[str, str]:

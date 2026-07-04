@@ -20,7 +20,7 @@ from aiohttp.test_utils import TestClient, TestServer, unused_port
 # 插件目录名包含连字符，无法作为 Python 包导入，因此将插件根目录加入搜索路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from anp.authentication import DIDWbaAuthHeader, create_did_wba_document
+from anp.authentication import create_did_wba_document
 from anp.authentication import did_wba_verifier as did_wba_verifier_module
 from anp.authentication.did_resolver import resolve_did_document
 from anp.authentication.did_wba import resolve_did_wba_document
@@ -31,6 +31,7 @@ from config import ANPConfig
 from identity import load_or_create_identity
 from server import create_app
 from tests.helpers.did_server import DIDDocumentServer
+from tests.helpers.signing import build_signed_headers
 
 
 def _config(endpoint: str, tmp_path: Path) -> ANPConfig:
@@ -150,28 +151,6 @@ async def anp_app(
         did_wba_verifier_module.resolve_did_wba_document = original_resolver
 
 
-async def _build_signed_headers(
-    caller_identity: dict[str, Any],
-    target_url: str,
-    body: str,
-) -> dict[str, str]:
-    """使用 DIDWbaAuthHeader 生成合法签名头。"""
-    auth = DIDWbaAuthHeader(
-        did_document_path=str(caller_identity["did_path"]),
-        private_key_path=str(caller_identity["key_path"]),
-        auth_mode="http_signatures",
-    )
-    headers = auth.get_auth_header(
-        server_url=target_url,
-        force_new=True,
-        method="POST",
-        headers={"Content-Type": "application/json"},
-        body=body,
-    )
-    headers["Content-Type"] = "application/json"
-    return headers
-
-
 @pytest.mark.asyncio
 async def test_rpc_with_valid_signature_returns_result(anp_app, caller_identity):
     """合法签名请求应返回 JSON-RPC result。"""
@@ -188,7 +167,7 @@ async def test_rpc_with_valid_signature_returns_result(anp_app, caller_identity)
             "id": "integ-1",
         }
     )
-    headers = await _build_signed_headers(caller_identity, target_url, body)
+    headers = await build_signed_headers(caller_identity, target_url, body)
 
     resp = await client.post("/agent/rpc", data=body, headers=headers)
 
@@ -218,7 +197,7 @@ async def test_rpc_with_invalid_signature_returns_401(anp_app, caller_identity):
             "id": "integ-2",
         }
     )
-    headers = await _build_signed_headers(caller_identity, target_url, body)
+    headers = await build_signed_headers(caller_identity, target_url, body)
     # 用固定无效字符串替换整个 Signature，避免假设原字符串长度
     headers["Signature"] = "sig1=:invalid_signature:"
 

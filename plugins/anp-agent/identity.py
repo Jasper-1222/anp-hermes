@@ -20,27 +20,32 @@ _PUBLIC_KEY_MODE = 0o644
 def _atomic_write_text(path: Path, text: str, mode: int) -> None:
     """以指定权限原子写入文本文件。
 
+    先写入同目录临时文件，再 rename 覆盖目标文件，保证崩溃时不会留下半写文件；
     使用 os.open(..., O_CREAT | O_WRONLY, mode) 在创建时即应用权限，
     避免 `write -> chmod` 之间的竞态导致文件短暂可读。
     """
+    tmp_path = path.with_name(f"{path.name}.tmp")
     flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC
-    fd = os.open(path, flags, mode)
+    fd = os.open(tmp_path, flags, mode)
     try:
         with os.fdopen(fd, "w", encoding="utf-8", closefd=False) as f:
             f.write(text)
     finally:
         os.close(fd)
+    os.replace(tmp_path, path)
 
 
 def _atomic_write_bytes(path: Path, data: bytes, mode: int) -> None:
     """以指定权限原子写入二进制文件。"""
+    tmp_path = path.with_name(f"{path.name}.tmp")
     flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC
-    fd = os.open(path, flags, mode)
+    fd = os.open(tmp_path, flags, mode)
     try:
         with os.fdopen(fd, "wb", closefd=False) as f:
             f.write(data)
     finally:
         os.close(fd)
+    os.replace(tmp_path, path)
 
 
 @dataclass(frozen=True)

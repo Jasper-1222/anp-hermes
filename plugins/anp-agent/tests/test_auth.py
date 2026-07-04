@@ -8,18 +8,19 @@ from pathlib import Path
 
 import pytest
 import pytest_asyncio
-from aiohttp import web
 
 # 插件目录名包含连字符，无法作为 Python 包导入，因此将插件根目录加入搜索路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from anp.authentication import DIDWbaAuthHeader, create_did_wba_document
+from anp.authentication import create_did_wba_document
 from anp.authentication import did_wba_verifier as did_wba_verifier_module
 from anp.authentication.did_resolver import resolve_did_document
 from anp.authentication.did_wba import resolve_did_wba_document
 
 from auth import AuthenticationError, create_auth
 from identity import ANPIdentity, load_or_create_identity
+from tests.helpers.did_server import DIDDocumentServer
+from tests.helpers.signing import build_signed_headers
 
 
 @pytest.fixture
@@ -68,28 +69,8 @@ def caller_identity(tmp_path: Path) -> dict:
 @pytest_asyncio.fixture
 async def did_server(caller_identity: dict):
     """启动本地 DID 文档服务器，并返回可解析的 base URL。"""
-    caller_did = caller_identity["did"]
-    caller_doc = caller_identity["did_document"]
-
-    async def _handler(request: web.Request) -> web.Response:
-        return web.json_response(caller_doc)
-
-    app = web.Application()
-    path_segments = caller_did.split(":")[3:]
-    route_path = "/" + "/".join(path_segments) + "/did.json"
-    app.router.add_get(route_path, _handler)
-
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", 0)
-    await site.start()
-
-    port = site._server.sockets[0].getsockname()[1]
-    base_url = f"http://127.0.0.1:{port}"
-
-    yield base_url
-
-    await runner.cleanup()
+    async with DIDDocumentServer(caller_identity["did_document"]) as server:
+        yield server.base_url
 
 
 @pytest_asyncio.fixture
@@ -113,32 +94,12 @@ async def auth(identity: ANPIdentity, did_server: str):
     did_wba_verifier_module.resolve_did_wba_document = original_resolver
 
 
-async def _build_signed_headers(
-    caller_identity: dict, target_url: str, body: str
-) -> dict:
-    """使用 DIDWbaAuthHeader 生成合法签名头。"""
-    auth = DIDWbaAuthHeader(
-        did_document_path=str(caller_identity["did_path"]),
-        private_key_path=str(caller_identity["key_path"]),
-        auth_mode="http_signatures",
-    )
-    headers = auth.get_auth_header(
-        server_url=target_url,
-        force_new=True,
-        method="POST",
-        headers={"Content-Type": "application/json"},
-        body=body,
-    )
-    headers["Content-Type"] = "application/json"
-    return headers
-
-
 @pytest.mark.asyncio
 async def test_valid_signature_returns_caller_did(auth, caller_identity: dict) -> None:
     """合法签名请求应返回正确的调用方 DID。"""
     target_url = "http://localhost:8900/agent/rpc"
     body = json.dumps({"jsonrpc": "2.0", "method": "chat", "params": {}, "id": "1"})
-    headers = await _build_signed_headers(caller_identity, target_url, body)
+    headers = await build_signed_headers(caller_identity, target_url, body)
 
     caller_did = await auth.authenticate("POST", target_url, headers, body)
 
@@ -162,7 +123,7 @@ async def test_invalid_signature_raises(auth, caller_identity: dict) -> None:
     """签名无效时应抛出 AuthenticationError。"""
     target_url = "http://localhost:8900/agent/rpc"
     body = json.dumps({"jsonrpc": "2.0", "method": "chat", "params": {}, "id": "1"})
-    headers = await _build_signed_headers(caller_identity, target_url, body)
+    headers = await build_signed_headers(caller_identity, target_url, body)
 
     headers["Signature"] = "sig1=:invalid_signature:"
 
