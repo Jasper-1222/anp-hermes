@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
@@ -17,13 +17,44 @@ from config import ANPConfig
 
 logger = logging.getLogger(__name__)
 
+# 在 Hermes 环境中使用其 MessageType 与 SessionSource；测试或独立运行则回退
+_HERMES_AVAILABLE = False
+try:
+    from gateway.config import Platform
+    from gateway.platforms.base import MessageType
+    from gateway.session import SessionSource
+
+    _HERMES_AVAILABLE = True
+except Exception:  # pragma: no cover - 仅在不具备 Hermes 源码的回退场景触发
+    MessageType = None  # type: ignore[misc,assignment]
+    SessionSource = None  # type: ignore[misc,assignment]
+    Platform = None  # type: ignore[misc,assignment]
+
+
+def _build_source(chat_id: str, user_id: str) -> Any:
+    """构造 Hermes SessionSource；无 Hermes 环境时返回 None。"""
+    if SessionSource is None or Platform is None:
+        return None
+    # Platform 枚举对运行时注册的平台友好：未注册时可能抛 ValueError，
+    # 这里回退为 None，保证无源码或注册顺序差异时不阻塞 bridge。
+    try:
+        platform = Platform("anp")
+    except Exception:  # pragma: no cover - 注册顺序相关边界
+        return None
+    return SessionSource(
+        platform=platform,
+        chat_id=chat_id,
+        user_id=user_id,
+        chat_type="dm",
+    )
+
 
 @dataclass
 class MessageEvent:
     """Hermes handle_message 所需的最小事件结构（duck typing）。"""
 
     text: str
-    message_type: str = "text"
+    message_type: Any = MessageType.TEXT if _HERMES_AVAILABLE else "text"
     source: Any = None
     raw_message: Any = None
     message_id: str | None = None
@@ -41,6 +72,17 @@ class MessageEvent:
     internal: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: datetime = field(default_factory=datetime.now)
+
+    def __post_init__(self) -> None:
+        """确保 message_type 在 Hermes 环境中为 MessageType 枚举。"""
+        if _HERMES_AVAILABLE and MessageType is not None:
+            if isinstance(self.message_type, str):
+                try:
+                    self.message_type = MessageType(self.message_type)
+                except ValueError:
+                    self.message_type = MessageType.TEXT
+            elif not isinstance(self.message_type, MessageType):
+                self.message_type = MessageType.TEXT
 
 
 @dataclass
@@ -60,14 +102,14 @@ class ANPBridge:
     def __init__(
         self,
         config: ANPConfig,
-        message_handler: Callable[[MessageEvent], None],
+        message_handler: Callable[[MessageEvent], None | Awaitable[None]],
         max_pending: int = 1024,
     ) -> None:
         """构造桥接器。
 
         Args:
             config: ANP 插件配置，其中 request_timeout 与 future_ttl 会被使用。
-            message_handler: 上层消息处理回调，接收 MessageEvent。
+            message_handler: 上层消息处理回调，接收 MessageEvent，可为同步或异步。
             max_pending: 同时等待的最大 pending Future 数量。
         """
         self._config = config
@@ -134,6 +176,7 @@ class ANPBridge:
         event = MessageEvent(
             text=params.get("message", ""),
             message_id=rpc_id,
+            source=_build_source(rpc_id, caller_did),
             metadata={
                 "anp_rpc_id": rpc_id,
                 "anp_method": method,
@@ -147,7 +190,9 @@ class ANPBridge:
         self._pending[rpc_id] = _PendingFuture(future=future)
 
         try:
-            self._message_handler(event)
+            result = self._message_handler(event)
+            if asyncio.iscoroutine(result):
+                await result
         except Exception as exc:  # pragma: no cover - handler 异常不应影响 bridge
             logger.exception("message_handler 调用失败: %s", exc)
             self._pending.pop(rpc_id, None)

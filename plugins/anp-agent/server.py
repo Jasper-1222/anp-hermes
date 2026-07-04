@@ -132,6 +132,12 @@ def _build_openrpc_json(config: ANPConfig) -> dict[str, Any]:
     }
 
 
+async def _handle_did_json(request: web.Request) -> web.Response:
+    """GET /agent/did.json 处理器（ANP DID 文档解析所需）。"""
+    identity: ANPIdentity = request.app[_IDENTITY_KEY]
+    return web.json_response(identity.did_document)
+
+
 async def _handle_ad_json(request: web.Request) -> web.Response:
     """GET /agent/ad.json 处理器。"""
     config: ANPConfig = request.app[_CONFIG_KEY]
@@ -318,6 +324,15 @@ def create_app(
     app.router.add_get("/agent/ad.json", _handle_ad_json)
     app.router.add_get("/agent/interface.json", _handle_interface_json)
     app.router.add_post("/agent/rpc", _handle_rpc)
+
+    # 注册 DID 文档端点：根据 DID 的 path segments 动态构造路径
+    did_parts = identity.did.split(":")
+    if len(did_parts) >= 4:
+        path_segments = did_parts[3:]
+        did_route_path = "/" + "/".join(path_segments) + "/did.json"
+    else:
+        did_route_path = "/agent/did.json"
+    app.router.add_get(did_route_path, _handle_did_json)
 
     logger.info("ANP HTTP 服务器路由已注册: %s", list(app.router.keys()))
     return app

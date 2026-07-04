@@ -68,6 +68,28 @@ async def client(
 
 
 @pytest.mark.asyncio
+async def test_get_did_json_returns_identity_document(
+    identity: ANPIdentity,
+    mock_auth: MagicMock,
+    mock_bridge: MagicMock,
+):
+    """GET /agent/did.json 返回服务端 DID 文档。"""
+    app = create_app(_config(), identity, mock_auth, mock_bridge)
+    server = TestServer(app)
+    client = TestClient(server)
+    await client.start_server()
+
+    try:
+        # DID 路径由 DID 的 path segments 决定：did:wba:localhost:agent:e1_test
+        resp = await client.get("/agent/e1_test/did.json")
+        assert resp.status == 200
+        data = await resp.json()
+        assert data["id"] == identity.did
+    finally:
+        await client.close()
+
+
+@pytest.mark.asyncio
 async def test_get_ad_json_returns_required_fields(
     client: TestClient, identity: ANPIdentity
 ):
