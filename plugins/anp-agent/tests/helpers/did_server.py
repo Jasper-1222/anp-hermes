@@ -38,6 +38,13 @@ class DIDDocumentServer:
         """返回服务器 base URL，需在 start 之后访问。"""
         return self._base_url
 
+    @property
+    def document_url(self) -> str:
+        """返回托管的 DID 文档完整 URL，需在 start 之后访问。"""
+        did = self._did_document["id"]
+        path_segments = did.split(":")[3:]
+        return f"{self._base_url}/{'/'.join(path_segments)}/did.json"
+
     async def _handler(self, request: web.Request) -> web.Response:
         """返回托管的 DID 文档。"""
         return web.json_response(self._did_document)

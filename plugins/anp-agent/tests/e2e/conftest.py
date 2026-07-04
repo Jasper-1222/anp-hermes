@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+import json
+import os
 import socket
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
+# 插件目录名包含连字符，无法作为 Python 包导入，因此将插件根目录加入搜索路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import pytest
+import pytest_asyncio
 import requests
 import yaml
+from anp.authentication import create_did_wba_document
+
+from tests.helpers.did_server import DIDDocumentServer
 
 
 def pytest_addoption(parser):
@@ -78,3 +88,41 @@ def _load_user_hermes_config() -> dict[str, Any]:
             return yaml.safe_load(f) or {}
     except Exception:
         return {}
+
+
+@pytest.fixture
+def anp_caller_identity(tmp_path: Path) -> dict[str, Any]:
+    """动态生成 ANP caller DID WBA 身份及密钥文件。"""
+    workdir = tmp_path / "caller"
+    workdir.mkdir(parents=True, exist_ok=True)
+
+    did_document, keys = create_did_wba_document(
+        hostname="localhost",
+        path_segments=["agent"],
+        agent_description_url="https://localhost/agent/ad.json",
+        did_profile="e1",
+    )
+    did = did_document["id"]
+    auth_key = keys.get("key-1")
+    assert auth_key is not None, "DID 文档未生成 key-1 认证密钥"
+    private_key_pem = auth_key[0]
+
+    did_path = workdir / "did.json"
+    key_path = workdir / "private_key.pem"
+    did_path.write_text(json.dumps(did_document), encoding="utf-8")
+    key_path.write_bytes(private_key_pem)
+
+    return {
+        "did": did,
+        "did_document": did_document,
+        "private_key_pem": private_key_pem,
+        "did_path": did_path,
+        "key_path": key_path,
+    }
+
+
+@pytest_asyncio.fixture
+async def did_document_server(anp_caller_identity: dict[str, Any]) -> DIDDocumentServer:
+    """启动本地 DID 文档服务器，供 ANP verifier 解析 caller DID。"""
+    async with DIDDocumentServer(anp_caller_identity["did_document"]) as server:
+        yield server
