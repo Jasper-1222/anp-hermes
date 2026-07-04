@@ -37,7 +37,7 @@ class ANPAdapter(BasePlatformAdapter):
         self._app = None
         self._runner = None
 
-    async def connect(self, *, is_reconnect=False) -> bool:
+    async def connect(self, *, is_reconnect: bool = False) -> bool:
         """连接平台：加载身份、创建认证与桥接、启动 aiohttp 服务器与桥接任务。
 
         Args:
@@ -46,45 +46,50 @@ class ANPAdapter(BasePlatformAdapter):
         Returns:
             是否连接成功。
         """
-        # 加载或创建 DID WBA 身份
-        self._identity = load_or_create_identity(
-            self._anp_config.data_dir, self._anp_config.hostname
-        )
+        try:
+            # 加载或创建 DID WBA 身份
+            self._identity = load_or_create_identity(
+                self._anp_config.data_dir, self._anp_config.hostname
+            )
 
-        # 创建服务端认证器
-        self._auth = create_auth(self._identity)
+            # 创建服务端认证器
+            self._auth = create_auth(self._identity)
 
-        # 创建 RPC 桥接器，将 Hermes handle_message 作为消息处理入口
-        self._bridge = ANPBridge(
-            config=self._anp_config,
-            message_handler=self.handle_message,
-        )
+            # 创建 RPC 桥接器，将 Hermes handle_message 作为消息处理入口
+            self._bridge = ANPBridge(
+                config=self._anp_config,
+                message_handler=self.handle_message,
+            )
 
-        # 启动 aiohttp 服务器
-        self._app = create_app(
-            config=self._anp_config,
-            identity=self._identity,
-            auth=self._auth,
-            bridge=self._bridge,
-        )
-        self._runner = web.AppRunner(self._app)
-        await self._runner.setup()
-        site = web.TCPSite(
-            self._runner,
-            host=self._anp_config.host,
-            port=self._anp_config.port,
-        )
-        await site.start()
-        # 获取实际绑定的地址，port=0 时尤其需要
-        addresses = [f"{addr[0]}:{addr[1]}" for addr in self._runner.addresses]
-        logger.info("ANP 适配器已启动监听 %s", addresses or "unknown")
+            # 启动 aiohttp 服务器
+            self._app = create_app(
+                config=self._anp_config,
+                identity=self._identity,
+                auth=self._auth,
+                bridge=self._bridge,
+            )
+            self._runner = web.AppRunner(self._app)
+            await self._runner.setup()
+            site = web.TCPSite(
+                self._runner,
+                host=self._anp_config.host,
+                port=self._anp_config.port,
+            )
+            await site.start()
+            # 获取实际绑定的地址，port=0 时尤其需要
+            addresses = [f"{addr[0]}:{addr[1]}" for addr in self._runner.addresses]
+            logger.info("ANP 适配器已启动监听 %s", addresses or "unknown")
 
-        # 启动桥接器后台任务
-        await self._bridge.start()
+            # 启动桥接器后台任务
+            await self._bridge.start()
 
-        # 标记连接成功
-        self._mark_connected()
-        return True
+            # 标记连接成功
+            self._mark_connected()
+            return True
+        except Exception as exc:
+            logger.exception("ANP 适配器连接失败: %s", exc)
+            await self.disconnect()
+            return False
 
     async def disconnect(self) -> None:
         """断开平台连接：停止服务器、桥接任务并标记断开。"""
@@ -101,7 +106,13 @@ class ANPAdapter(BasePlatformAdapter):
 
         self._mark_disconnected()
 
-    async def send(self, chat_id, content, reply_to=None, metadata=None):
+    async def send(
+        self,
+        chat_id: str,
+        content: str,
+        reply_to: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> SendResult:
         """向指定 chat_id 发送消息。
 
         本适配器仅处理以 "anp:" 为前缀的 chat_id，用于将 Hermes 回复写回 RPC Future。

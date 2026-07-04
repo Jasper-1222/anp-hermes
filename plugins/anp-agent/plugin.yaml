@@ -31,11 +31,11 @@ optional_env:
     prompt: "ANP 数据目录"
     password: false
   - name: ANP_REQUEST_TIMEOUT
-    description: "等待 Hermes 回复的最大秒数（默认：60）"
+    description: "等待 Hermes 回复的最大秒数（默认：300）"
     prompt: "ANP 请求超时"
     password: false
   - name: ANP_FUTURE_TTL
-    description: "pending future 过期清理时间（默认：120）"
+    description: "pending future 过期清理时间（默认：300）"
     prompt: "ANP future TTL"
     password: false
   - name: ANP_ALLOWED_USERS

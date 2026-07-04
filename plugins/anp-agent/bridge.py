@@ -200,9 +200,7 @@ class ANPBridge:
             return "内部错误：无法将请求提交给 Hermes"
 
         try:
-            result = await asyncio.wait_for(
-                future, timeout=self._config.request_timeout
-            )
+            result = await asyncio.wait_for(future, timeout=self._config.request_timeout)
             return result
         except asyncio.TimeoutError:
             logger.warning("rpc_id=%s 等待结果超时", rpc_id)
@@ -248,9 +246,7 @@ class ANPBridge:
         for rpc_id in expired_keys:
             entry = self._pending.pop(rpc_id, None)
             if entry is not None and not entry.future.done():
-                entry.future.set_exception(
-                    asyncio.TimeoutError("pending future 已过期")
-                )
+                entry.future.set_exception(asyncio.TimeoutError("pending future 已过期"))
             logger.debug("清理过期 pending future: rpc_id=%s", rpc_id)
 
     async def _cleanup_loop(self) -> None:

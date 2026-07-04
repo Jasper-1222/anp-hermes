@@ -31,7 +31,7 @@ def _clear_env(monkeypatch):
 
 
 def test_default_values(monkeypatch):
-    """验证默认值，重点检查降低后的超时时间。"""
+    """验证默认值。"""
     _clear_env(monkeypatch)
 
     cfg = load_config(_platform_config())
@@ -42,8 +42,8 @@ def test_default_values(monkeypatch):
     assert cfg.hostname == "localhost"
     assert cfg.endpoint == "http://localhost:8900"
     assert cfg.data_dir == str(Path.home() / ".hermes" / "plugins" / "anp-agent")
-    assert cfg.request_timeout == 60
-    assert cfg.future_ttl == 120
+    assert cfg.request_timeout == 300
+    assert cfg.future_ttl == 300
 
 
 def test_env_variables_override_all_fields(monkeypatch):
@@ -115,8 +115,8 @@ def test_invalid_integer_falls_back_to_default(monkeypatch):
     cfg = load_config(_platform_config(extra))
 
     assert cfg.port == 8900
-    assert cfg.request_timeout == 60
-    assert cfg.future_ttl == 120
+    assert cfg.request_timeout == 300
+    assert cfg.future_ttl == 300
 
 
 def test_data_dir_expands_tilde(monkeypatch):

@@ -223,9 +223,7 @@ async def test_rpc_without_signature_returns_401(anp_app):
         }
     )
 
-    resp = await client.post(
-        "/agent/rpc", data=body, headers={"Content-Type": "application/json"}
-    )
+    resp = await client.post("/agent/rpc", data=body, headers={"Content-Type": "application/json"})
 
     assert resp.status == 401
     data = await resp.json()

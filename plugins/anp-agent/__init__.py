@@ -1,9 +1,11 @@
 """ANP Agent 平台插件入口。"""
 
+from typing import Any
+
 _REQUIRED_ENV = ["ANP_ALLOW_ALL_USERS"]
 
 
-def register(ctx):
+def register(ctx: Any) -> None:
     """注册 ANP 平台适配器到 Hermes 插件上下文。
 
     Args:

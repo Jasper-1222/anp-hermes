@@ -74,6 +74,12 @@ class ANPAuth:
 
         ANP SDK 的 `resolve_did_wba_document` 已有 10 秒默认超时，但无法通过配置调整。
         这里包装模块级 resolver，使其支持 `ANP_DID_RESOLVE_TIMEOUT` 环境变量。
+
+        .. note::
+            当前实现会替换模块级 resolver。若进程内存在多个 ``ANPAuth`` 实例，
+            后创建的实例会覆盖前一个实例的 wrapper；测试代码也依赖同一模块函数，
+            因此不要在生产环境中同时运行多个使用不同超时的 ``ANPAuth`` 实例。
+            这是 ANP SDK 未暴露自定义 resolver 接口的权宜方案。
         """
         original_resolver = did_wba_verifier_module.resolve_did_wba_document
         timeout = self._did_resolve_timeout

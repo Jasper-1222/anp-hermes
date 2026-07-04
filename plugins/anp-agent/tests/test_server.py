@@ -90,9 +90,7 @@ async def test_get_did_json_returns_identity_document(
 
 
 @pytest.mark.asyncio
-async def test_get_ad_json_returns_required_fields(
-    client: TestClient, identity: ANPIdentity
-):
+async def test_get_ad_json_returns_required_fields(client: TestClient, identity: ANPIdentity):
     """GET /agent/ad.json 返回合法 JSON 且包含必要字段。"""
     resp = await client.get("/agent/ad.json")
     assert resp.status == 200
