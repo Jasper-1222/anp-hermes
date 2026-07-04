@@ -40,8 +40,13 @@ def pytest_collection_modifyitems(config, items):
 
 
 def free_port() -> int:
-    """申请一个本地空闲 TCP 端口。"""
+    """申请一个本地空闲 TCP 端口。
+
+    通过 SO_REUSEADDR 缓解"获取端口后、服务启动前"被其他进程占用的
+    TOCTOU 竞争，但无法完全消除。
+    """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("127.0.0.1", 0))
         return int(sock.getsockname()[1])
 
@@ -54,7 +59,7 @@ def wait_for_url(url: str, timeout: float = 60.0, interval: float = 0.5) -> bool
             resp = requests.get(url, timeout=2.0)
             if resp.status_code == 200:
                 return True
-        except Exception:
+        except requests.RequestException:
             pass
         time.sleep(interval)
     return False
