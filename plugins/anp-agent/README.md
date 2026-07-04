@@ -34,8 +34,8 @@ gateway:
         hostname: localhost
         endpoint: http://localhost:8900
         data_dir: ~/.hermes/plugins/anp-agent/
-        request_timeout: 300
-        future_ttl: 300
+        request_timeout: 60
+        future_ttl: 120
 ```
 
 环境变量优先级高于配置文件：

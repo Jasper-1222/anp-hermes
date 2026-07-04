@@ -42,8 +42,8 @@ def test_default_values(monkeypatch):
     assert cfg.hostname == "localhost"
     assert cfg.endpoint == "http://localhost:8900"
     assert cfg.data_dir == str(Path.home() / ".hermes" / "plugins" / "anp-agent")
-    assert cfg.request_timeout == 300
-    assert cfg.future_ttl == 300
+    assert cfg.request_timeout == 60
+    assert cfg.future_ttl == 120
 
 
 def test_env_variables_override_all_fields(monkeypatch):
@@ -115,8 +115,8 @@ def test_invalid_integer_falls_back_to_default(monkeypatch):
     cfg = load_config(_platform_config(extra))
 
     assert cfg.port == 8900
-    assert cfg.request_timeout == 300
-    assert cfg.future_ttl == 300
+    assert cfg.request_timeout == 60
+    assert cfg.future_ttl == 120
 
 
 def test_data_dir_expands_tilde(monkeypatch):

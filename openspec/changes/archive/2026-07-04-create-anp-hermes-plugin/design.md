@@ -66,8 +66,8 @@ DID 文档、私钥 PEM、`agent.json` 默认存放在 `~/.hermes/plugins/anp-ag
 | DID hostname | `ANP_HOSTNAME` | `gateway.platforms.anp.extra.hostname` | `localhost` | 生成 did:wba 时使用的 hostname |
 | 公开 endpoint | `ANP_ENDPOINT` | `gateway.platforms.anp.extra.endpoint` | `http://{hostname}:{port}` | ad.json 中声明的服务地址 |
 | 数据目录 | `ANP_DATA_DIR` | `gateway.platforms.anp.extra.data_dir` | `~/.hermes/plugins/anp-agent/` | DID 和私钥存储路径 |
-| 请求超时 | `ANP_REQUEST_TIMEOUT` | `gateway.platforms.anp.extra.request_timeout` | `300` | 等待 Hermes 回复的最大秒数 |
-| Future TTL | `ANP_FUTURE_TTL` | `gateway.platforms.anp.extra.future_ttl` | `300` | pending future 过期清理时间 |
+| 请求超时 | `ANP_REQUEST_TIMEOUT` | `gateway.platforms.anp.extra.request_timeout` | `60` | 等待 Hermes 回复的最大秒数，默认保持较短以尽快失败 |
+| Future TTL | `ANP_FUTURE_TTL` | `gateway.platforms.anp.extra.future_ttl` | `120` | pending future 过期清理时间，应略大于请求超时 |
 
 ### 决策 8：仅认证，不授权
 
