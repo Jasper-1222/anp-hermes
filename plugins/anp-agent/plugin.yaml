@@ -1,0 +1,44 @@
+name: anp-agent
+version: 0.1.0
+description: "ANP（Agent Network Protocol）服务智能体 Hermes 平台插件。提供 did:wba 身份、DID WBA HTTP Message Signature 认证、OpenRPC 接口描述与 JSON-RPC 调用桥接，使 Hermes 能被其他 ANP 智能体发现与调用。"
+author: ANP Hermes Contributors
+kind: platform
+entrypoint: __init__.py:register
+requires_env:
+  - name: ANP_ALLOW_ALL_USERS
+    description: "允许任意 DID WBA 调用方访问（测试环境必需）"
+    prompt: "允许所有 ANP 调用方？（true/false）"
+    password: false
+optional_env:
+  - name: ANP_HOST
+    description: "HTTP 服务监听地址（默认：0.0.0.0）"
+    prompt: "ANP 监听地址"
+    password: false
+  - name: ANP_PORT
+    description: "HTTP 服务监听端口（默认：8900）"
+    prompt: "ANP 监听端口"
+    password: false
+  - name: ANP_HOSTNAME
+    description: "生成 did:wba 时使用的 hostname（默认：localhost）"
+    prompt: "ANP hostname"
+    password: false
+  - name: ANP_ENDPOINT
+    description: "ad.json 中声明的服务地址（默认：http://{hostname}:{port}）"
+    prompt: "ANP 公开 endpoint"
+    password: false
+  - name: ANP_DATA_DIR
+    description: "DID 与私钥存储目录（默认：~/.hermes/plugins/anp-agent/）"
+    prompt: "ANP 数据目录"
+    password: false
+  - name: ANP_REQUEST_TIMEOUT
+    description: "等待 Hermes 回复的最大秒数（默认：300）"
+    prompt: "ANP 请求超时"
+    password: false
+  - name: ANP_FUTURE_TTL
+    description: "pending future 过期清理时间（默认：300）"
+    prompt: "ANP future TTL"
+    password: false
+  - name: ANP_ALLOWED_USERS
+    description: "允许的调用方 DID 列表（逗号分隔，可选）"
+    prompt: "允许的用户 DID"
+    password: false

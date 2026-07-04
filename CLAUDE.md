@@ -18,12 +18,62 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 开发命令
 
-由于当前尚未引入完整技术栈，后续补充：
+### 安装与测试
 
-- 构建命令
-- 测试命令（含如何运行单个测试）
-- Lint / 格式化命令
-- 本地启动命令
+```bash
+# 进入插件目录
+cd plugins/anp-agent
+
+# 安装插件及测试/开发依赖
+python -m pip install -e ".[test,dev]"
+
+# 运行全部测试
+python -m pytest tests/ -v
+
+# 运行单个测试文件
+python -m pytest tests/test_server.py -v
+
+# 运行测试并检查覆盖率（覆盖率要求 ≥ 85%）
+python -m pytest --cov=. --cov-fail-under=85 -q
+```
+
+### Lint 与格式化
+
+```bash
+# 检查 ruff lint
+ruff check .
+
+# 自动修复可修复的 lint 问题
+ruff check --fix .
+
+# 检查 black 格式化
+black --check .
+
+# 应用 black 格式化
+black .
+```
+
+### 本地启动
+
+```bash
+# 将插件复制/链接到 Hermes 插件目录
+ln -s $(pwd)/plugins/anp-agent ~/.hermes/plugins/anp-agent
+
+# 在 ~/.hermes/config.yaml 中启用 anp 平台
+cat >> ~/.hermes/config.yaml <<EOF
+gateway:
+  platforms:
+    anp:
+      extra:
+        host: 0.0.0.0
+        port: 8900
+        hostname: localhost
+        endpoint: http://localhost:8900
+EOF
+
+# 启动 Hermes gateway（测试环境需设置 ANP_ALLOW_ALL_USERS=1）
+ANP_ALLOW_ALL_USERS=1 hermes run
+```
 
 当前 OpenSpec 相关命令：
 
@@ -53,6 +103,14 @@ openspec status --change create-anp-hermes-plugin
     ├── commands/
     └── skills/
 ```
+
+## 本地开发环境
+
+- **Hermes 源码**：`/home/peter/hermes-agent`
+  - 实现插件时需要参考 `BasePlatformAdapter`、`MessageEvent`、`platform_registry`、`ctx.register_platform()` 等契约。
+  - 插件代码必须零侵入 Hermes 核心，仅通过公开/稳定的插件接口与 Hermes 交互。
+- **Hermes 程序**：本地已安装，并保持为最新版本。
+  - 可用于 E2E 验证：启动 gateway 并加载 `anp-agent` 插件。
 
 ## 架构概览
 
