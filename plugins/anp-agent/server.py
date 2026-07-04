@@ -248,6 +248,10 @@ def _map_auth_error(exc: AuthenticationError) -> ANPRPCError:
     )
 
 
+# 请求体大小限制：1MB，避免大请求耗尽内存
+_MAX_REQUEST_BODY_SIZE = 1024 * 1024
+
+
 async def _handle_rpc(request: web.Request) -> web.Response:
     """POST /agent/rpc 处理器。"""
     auth: ANPAuth = request.app[_AUTH_KEY]
@@ -315,7 +319,7 @@ def create_app(
     Returns:
         aiohttp web.Application 实例。
     """
-    app = web.Application()
+    app = web.Application(client_max_size=_MAX_REQUEST_BODY_SIZE)
     app[_CONFIG_KEY] = config
     app[_IDENTITY_KEY] = identity
     app[_AUTH_KEY] = auth

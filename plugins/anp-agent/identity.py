@@ -12,6 +12,36 @@ from typing import Any
 
 from anp.authentication import create_did_wba_document
 
+# 私钥文件权限
+_PRIVATE_KEY_MODE = 0o600
+_PUBLIC_KEY_MODE = 0o644
+
+
+def _atomic_write_text(path: Path, text: str, mode: int) -> None:
+    """以指定权限原子写入文本文件。
+
+    使用 os.open(..., O_CREAT | O_WRONLY, mode) 在创建时即应用权限，
+    避免 `write -> chmod` 之间的竞态导致文件短暂可读。
+    """
+    flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC
+    fd = os.open(path, flags, mode)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", closefd=False) as f:
+            f.write(text)
+    finally:
+        os.close(fd)
+
+
+def _atomic_write_bytes(path: Path, data: bytes, mode: int) -> None:
+    """以指定权限原子写入二进制文件。"""
+    flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC
+    fd = os.open(path, flags, mode)
+    try:
+        with os.fdopen(fd, "wb", closefd=False) as f:
+            f.write(data)
+    finally:
+        os.close(fd)
+
 
 @dataclass(frozen=True)
 class ANPIdentity:
@@ -29,9 +59,8 @@ _PRIVATE_KEY_NAME = "private_key.pem"
 
 
 def _save_private_key(path: Path, pem: bytes) -> None:
-    """保存私钥 PEM 文件并设置 0o600 权限。"""
-    path.write_bytes(pem)
-    os.chmod(path, 0o600)
+    """保存私钥 PEM 文件，创建时即设置 0o600 权限。"""
+    _atomic_write_bytes(path, pem, _PRIVATE_KEY_MODE)
 
 
 def _load_private_key(path: Path) -> bytes:
@@ -88,7 +117,7 @@ def _generate_identity(data_dir: Path, hostname: str) -> ANPIdentity:
     did_path = data_dir / _DID_DOCUMENT_NAME
     key_path = data_dir / _PRIVATE_KEY_NAME
 
-    did_path.write_text(json.dumps(did_document, indent=2), encoding="utf-8")
+    _atomic_write_text(did_path, json.dumps(did_document, indent=2), _PUBLIC_KEY_MODE)
     _save_private_key(key_path, private_key_pem)
 
     return ANPIdentity(

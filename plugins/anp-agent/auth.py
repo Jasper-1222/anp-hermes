@@ -29,6 +29,10 @@ _DEFAULT_DID_RESOLVE_TIMEOUT = 10
 _JWT_PRIVATE_KEY_NAME = "jwt_private_key.pem"
 _JWT_PUBLIC_KEY_NAME = "jwt_public_key.pem"
 
+# 密钥文件权限
+_PRIVATE_KEY_MODE = 0o600
+_PUBLIC_KEY_MODE = 0o644
+
 
 class AuthenticationError(Exception):
     """认证失败时抛出的通用异常，不包含内部详细原因。"""
@@ -149,13 +153,19 @@ def _generate_rsa_key_pair() -> tuple[str, str]:
     return private_pem, public_pem
 
 
-def _save_key(path: Path, pem: str) -> None:
-    """保存密钥 PEM 文件，私钥权限 0o600，公钥 0o644。"""
-    path.write_text(pem, encoding="utf-8")
-    if "PRIVATE" in path.name:
-        path.chmod(0o600)
-    else:
-        path.chmod(0o644)
+def _save_key(path: Path, pem: str, *, is_private: bool) -> None:
+    """保存密钥 PEM 文件，私钥 0o600，公钥 0o644。
+
+    通过 os.open 在创建时即应用权限，避免 write->chmod 竞态。
+    """
+    mode = _PRIVATE_KEY_MODE if is_private else _PUBLIC_KEY_MODE
+    flags = os.O_CREAT | os.O_WRONLY | os.O_TRUNC
+    fd = os.open(path, flags, mode)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", closefd=False) as f:
+            f.write(pem)
+    finally:
+        os.close(fd)
 
 
 def _load_or_generate_jwt_keys(data_dir: Path) -> tuple[str, str]:
@@ -173,8 +183,8 @@ def _load_or_generate_jwt_keys(data_dir: Path) -> tuple[str, str]:
         return private_pem, public_pem
 
     private_pem, public_pem = _generate_rsa_key_pair()
-    _save_key(private_path, private_pem)
-    _save_key(public_path, public_pem)
+    _save_key(private_path, private_pem, is_private=True)
+    _save_key(public_path, public_pem, is_private=False)
     return private_pem, public_pem
 
 
