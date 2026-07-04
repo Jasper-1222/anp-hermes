@@ -37,6 +37,8 @@ test = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
     "anp[api]>=0.8.8,<0.9.0",
+    "pyyaml>=6.0.0",
+    "requests>=2.31.0",
 ]
 dev = [
     "ruff>=0.5.0",
@@ -47,6 +49,10 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "e2e: 需要 --run-e2e 的端到端测试",
+    "slow: 需要 --run-slow-e2e 的真实 LLM 慢速测试",
+]
 
 [tool.coverage.run]
 source = ["."]
