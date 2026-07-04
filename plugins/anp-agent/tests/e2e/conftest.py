@@ -42,8 +42,8 @@ def pytest_collection_modifyitems(config, items):
 def free_port() -> int:
     """申请一个本地空闲 TCP 端口。
 
-    通过 SO_REUSEADDR 缓解"获取端口后、服务启动前"被其他进程占用的
-    TOCTOU 竞争，但无法完全消除。
+    设置 SO_REUSEADDR，使后续服务进程在端口处于 TIME_WAIT 时仍能绑定，
+    从而降低端口不可用导致的启动失败概率；但无法完全消除 TOCTOU 竞争。
     """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
