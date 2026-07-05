@@ -23,6 +23,8 @@ import os
 import sys
 from pathlib import Path
 
+from typing import Any
+
 import aiohttp
 from anp.authentication import DIDWbaAuthHeader
 
@@ -126,9 +128,29 @@ async def main() -> int:
     print(f"\n发送: {message}")
     result = await _chat(endpoint, caller, message)
     print(f"HTTP 状态: {result['status']}")
-    print("响应:")
-    print(json.dumps(result["body"], indent=2, ensure_ascii=False))
+    _print_response(result["body"])
     return 0
+
+
+def _print_response(body: Any) -> None:
+    """友好地打印 JSON-RPC 响应。"""
+    error = body.get("error")
+    if error is not None:
+        print("响应错误:")
+        print(f"  code: {error.get('code')}")
+        print(f"  message: {error.get('message')}")
+        return
+
+    result = body.get("result")
+    if isinstance(result, dict) and "response" in result:
+        response_text = result["response"]
+        if isinstance(response_text, str):
+            print("\nHermes 回复:\n")
+            print(response_text)
+            return
+
+    print("响应:")
+    print(json.dumps(body, indent=2, ensure_ascii=False))
 
 
 if __name__ == "__main__":
