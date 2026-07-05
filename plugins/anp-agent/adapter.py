@@ -28,7 +28,12 @@ class ANPAdapter(BasePlatformAdapter):
         Args:
             config: Hermes PlatformConfig 对象，通过 load_config 转换为 ANPConfig。
         """
-        platform = Platform("anp")
+        # Platform 枚举在 Hermes 注册平台后可用；未注册时回退为字符串，
+        # 避免在平台注册前实例化适配器（如测试场景）时崩溃。
+        try:
+            platform = Platform("anp")
+        except ValueError:
+            platform = "anp"
         super().__init__(config=config, platform=platform)
         self._anp_config = load_config(config)
         self._identity = None
@@ -49,7 +54,9 @@ class ANPAdapter(BasePlatformAdapter):
         try:
             # 加载或创建 DID WBA 身份
             self._identity = load_or_create_identity(
-                self._anp_config.data_dir, self._anp_config.hostname
+                self._anp_config.data_dir,
+                self._anp_config.hostname,
+                self._anp_config.endpoint,
             )
 
             # 创建服务端认证器
@@ -77,8 +84,18 @@ class ANPAdapter(BasePlatformAdapter):
             )
             await site.start()
             # 获取实际绑定的地址，port=0 时尤其需要
-            addresses = [f"{addr[0]}:{addr[1]}" for addr in self._runner.addresses]
-            logger.info("ANP 适配器已启动监听 %s", addresses or "unknown")
+            addresses = self._runner.addresses
+            if addresses:
+                actual_host, actual_port = addresses[0]
+                logger.info("ANP 适配器已启动监听 %s:%s", actual_host, actual_port)
+                # port=0 时更新 endpoint，保证签名验证与广告 URL 正确
+                if self._anp_config.port == 0:
+                    scheme = "https" if self._anp_config.endpoint.startswith("https://") else "http"
+                    self._anp_config = self._anp_config.replace(
+                        endpoint=f"{scheme}://{self._anp_config.hostname}:{actual_port}"
+                    )
+            else:
+                logger.info("ANP 适配器已启动，但无法获取绑定地址")
 
             # 启动桥接器后台任务
             await self._bridge.start()
@@ -123,7 +140,10 @@ class ANPAdapter(BasePlatformAdapter):
         if self._bridge is None:
             return SendResult(success=False, error="adapter not connected")
         rpc_id = chat_id[4:]
-        self._bridge.set_result(rpc_id, content)
+        if not rpc_id:
+            return SendResult(success=False, error="empty rpc_id")
+        if not self._bridge.set_result(rpc_id, content):
+            return SendResult(success=False, error="rpc_id not found or already resolved")
         return SendResult(success=True, message_id=rpc_id)
 
     async def get_chat_info(self, chat_id) -> dict[str, Any]:

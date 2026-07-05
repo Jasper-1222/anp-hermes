@@ -115,7 +115,9 @@ def mock_identity(monkeypatch):
         private_key_pem=b"fake-key",
         data_dir=Path("/tmp/anp-test-adapter"),
     )
-    monkeypatch.setattr("adapter.load_or_create_identity", lambda data_dir, hostname: identity)
+    monkeypatch.setattr(
+        "adapter.load_or_create_identity", lambda data_dir, hostname, endpoint=None: identity
+    )
     return identity
 
 

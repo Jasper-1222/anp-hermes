@@ -23,6 +23,18 @@ class ANPConfig:
     request_timeout: int
     future_ttl: int
 
+    def replace(self, **kwargs) -> "ANPConfig":
+        """返回一份替换指定字段后的新配置。"""
+        return ANPConfig(
+            host=kwargs.get("host", self.host),
+            port=kwargs.get("port", self.port),
+            hostname=kwargs.get("hostname", self.hostname),
+            endpoint=kwargs.get("endpoint", self.endpoint),
+            data_dir=kwargs.get("data_dir", self.data_dir),
+            request_timeout=kwargs.get("request_timeout", self.request_timeout),
+            future_ttl=kwargs.get("future_ttl", self.future_ttl),
+        )
+
 
 def _get_str(extra: dict, env_name: str, key: str, default: str) -> str:
     """读取字符串配置项，环境变量优先级高于 extra。"""

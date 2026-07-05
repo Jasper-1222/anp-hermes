@@ -106,9 +106,12 @@ def _backup(path: Path) -> Path:
     return backup_path
 
 
-def _generate_identity(data_dir: Path, hostname: str) -> ANPIdentity:
+def _generate_identity(data_dir: Path, hostname: str, endpoint: str | None = None) -> ANPIdentity:
     """调用 ANP SDK 生成新的 DID WBA 身份并持久化。"""
-    agent_description_url = f"https://{hostname}/agent/ad.json"
+    if endpoint:
+        agent_description_url = f"{endpoint.rstrip('/')}/agent/ad.json"
+    else:
+        agent_description_url = f"https://{hostname}/agent/ad.json"
     did_document, keys = create_did_wba_document(
         hostname=hostname,
         path_segments=["agent"],
@@ -164,7 +167,11 @@ def _load_identity(data_dir: Path, hostname: str) -> ANPIdentity:
     )
 
 
-def load_or_create_identity(data_dir: Path | str, hostname: str) -> ANPIdentity:
+def load_or_create_identity(
+    data_dir: Path | str,
+    hostname: str,
+    endpoint: str | None = None,
+) -> ANPIdentity:
     """加载已有身份；若缺失或损坏则备份旧文件并重新生成。"""
     data_dir_path = Path(data_dir).expanduser()
     did_path = data_dir_path / _DID_DOCUMENT_NAME
@@ -179,6 +186,6 @@ def load_or_create_identity(data_dir: Path | str, hostname: str) -> ANPIdentity:
                 _backup(did_path)
             if key_path.exists():
                 _backup(key_path)
-            return _generate_identity(data_dir_path, hostname)
+            return _generate_identity(data_dir_path, hostname, endpoint)
 
-    return _generate_identity(data_dir_path, hostname)
+    return _generate_identity(data_dir_path, hostname, endpoint)

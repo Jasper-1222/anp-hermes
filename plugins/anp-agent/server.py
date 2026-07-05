@@ -235,7 +235,7 @@ def _map_auth_error(exc: AuthenticationError) -> ANPRPCError:
     message = str(exc) or "认证失败"
     text = f"{type(cause).__name__}: {cause}" if cause else message
 
-    if "Failed to resolve DID document" in text or "resolve" in text.lower():
+    if "Failed to resolve DID document" in text:
         return ANPRPCError(
             http_status=401,
             rpc_code=_ERROR_DID_UNRESOLVABLE,

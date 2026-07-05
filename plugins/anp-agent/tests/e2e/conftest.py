@@ -346,8 +346,10 @@ def llm_hermes_gateway(
     override_key_env = os.environ.get("ANP_E2E_LLM_KEY_ENV", "")
     if override_key_env:
         key_env = override_key_env
-    if key_env and not os.environ.get(key_env):
-        pytest.skip(f"LLM E2E 测试需要环境变量 {key_env}（当前 provider={provider}），未设置则跳过")
+    if not key_env or not os.environ.get(key_env):
+        pytest.skip(
+            f"LLM E2E 测试需要环境变量 {key_env or '对应 API KEY'}（当前 provider={provider}），未设置则跳过"
+        )
 
     gateway = _start_hermes_gateway(
         tmp_path,
