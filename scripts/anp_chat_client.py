@@ -2,11 +2,17 @@
 """手动测试 ANP Hermes 插件的 JSON-RPC chat 接口。
 
 用法:
+    # 1. 启动 Hermes gateway（需配置 ANP_DID_RESOLVER_BASE_URL 指向本脚本启动的 DID 文档服务器）
+    export ANP_ALLOW_ALL_USERS=1
+    export ANP_DID_RESOLVER_BASE_URL=http://127.0.0.1:18900
+    hermes run
+
+    # 2. 运行测试脚本
     export ANP_ENDPOINT=http://localhost:8900
     python3 anp_chat_client.py
 
-脚本会在当前目录生成或复用 caller 身份（did.json + private_key.pem），
-然后对 /agent/rpc 发送 DID WBA HTTP Message Signature 签名的 chat 请求。
+脚本会启动一个本地 DID 文档服务器（默认 127.0.0.1:18900），供服务方解析调用方 DID；
+同时在 ~/.anp-hermes-test-caller/ 生成或复用 caller 身份，对 /agent/rpc 发送签名请求。
 """
 
 from __future__ import annotations
@@ -18,10 +24,15 @@ import sys
 from pathlib import Path
 
 import aiohttp
+from aiohttp import web
 from anp.authentication import DIDWbaAuthHeader, create_did_wba_document
 
 DEFAULT_ENDPOINT = "http://localhost:8900"
 CALLER_DIR = Path.home() / ".anp-hermes-test-caller"
+
+# DID 文档服务器默认监听地址，需与 Hermes 启动时的 ANP_DID_RESOLVER_BASE_URL 一致
+_DID_SERVER_HOST = os.environ.get("ANP_DID_SERVER_HOST", "127.0.0.1")
+_DID_SERVER_PORT = int(os.environ.get("ANP_DID_SERVER_PORT", "18900"))
 
 
 def _load_or_create_caller_identity() -> dict:
@@ -57,7 +68,9 @@ def _load_or_create_caller_identity() -> dict:
     }
 
 
-async def _build_signed_headers(caller: dict, target_url: str, body: str) -> dict[str, str]:
+async def _build_signed_headers(
+    caller: dict, target_url: str, body: str
+) -> dict[str, str]:
     """生成 HTTP Message Signature 请求头。"""
     auth = DIDWbaAuthHeader(
         did_document_path=str(caller["did_path"]),
@@ -73,6 +86,33 @@ async def _build_signed_headers(caller: dict, target_url: str, body: str) -> dic
     )
     headers["Content-Type"] = "application/json"
     return headers
+
+
+async def _start_did_document_server(caller: dict) -> tuple[str, web.AppRunner]:
+    """启动本地 DID 文档服务器，返回 (base_url, runner)。"""
+    did_document = caller["did_document"]
+    did = caller["did"]
+    path_segments = did.split(":")[3:]
+    route_path = "/" + "/".join(path_segments) + "/did.json"
+
+    async def _handler(request: web.Request) -> web.Response:
+        return web.json_response(did_document)
+
+    app = web.Application()
+    app.router.add_get(route_path, _handler)
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, _DID_SERVER_HOST, _DID_SERVER_PORT)
+    await site.start()
+
+    addresses = runner.addresses
+    if not addresses:
+        await runner.cleanup()
+        raise RuntimeError("DID 文档服务器未能绑定到端口")
+    actual_host, actual_port = addresses[0]
+    base_url = f"http://{actual_host}:{actual_port}"
+    return base_url, runner
 
 
 async def _discover(endpoint: str) -> None:
@@ -113,25 +153,32 @@ async def main() -> int:
     caller = _load_or_create_caller_identity()
 
     print(f"服务端 endpoint: {endpoint}")
-    print(f"调用方 DID: {caller['did']}\n")
+    print(f"调用方 DID: {caller['did']}")
 
-    await _discover(endpoint)
+    did_url, did_runner = await _start_did_document_server(caller)
+    print(f"DID 文档服务器: {did_url}")
+    print(f"请确保 Hermes 已设置 ANP_DID_RESOLVER_BASE_URL={did_url}\n")
 
-    if len(sys.argv) > 1:
-        message = " ".join(sys.argv[1:])
-    else:
-        message = input("\n请输入要发送的消息: ").strip()
+    try:
+        await _discover(endpoint)
 
-    if not message:
-        print("消息为空，退出。")
-        return 1
+        if len(sys.argv) > 1:
+            message = " ".join(sys.argv[1:])
+        else:
+            message = input("\n请输入要发送的消息: ").strip()
 
-    print(f"\n发送: {message}")
-    result = await _chat(endpoint, caller, message)
-    print(f"HTTP 状态: {result['status']}")
-    print("响应:")
-    print(json.dumps(result["body"], indent=2, ensure_ascii=False))
-    return 0
+        if not message:
+            print("消息为空，退出。")
+            return 1
+
+        print(f"\n发送: {message}")
+        result = await _chat(endpoint, caller, message)
+        print(f"HTTP 状态: {result['status']}")
+        print("响应:")
+        print(json.dumps(result["body"], indent=2, ensure_ascii=False))
+        return 0
+    finally:
+        await did_runner.cleanup()
 
 
 if __name__ == "__main__":
