@@ -67,7 +67,24 @@ black --check .
 black .
 ```
 
-### 本地启动
+### 对话框安装（推荐）
+
+在 Hermes 对话框中复制并发送以下内容，LLM 会自动完成下载、安装、启用与重启 Gateway：
+
+```text
+安装插件 https://github.com/OpenAnp/hermes-platform-anp-agent/releases/latest/download/anp-agent.zip
+```
+
+LLM 将按以下步骤执行：
+
+1. 下载 `anp-agent.zip`。
+2. 检查 zip 内包含 `plugin.yaml` 与 `__init__.py`。
+3. 解压到 `~/.hermes/plugins/anp-agent/`。
+4. 在 `~/.hermes/config.yaml` 中启用 `anp-agent` 插件，并添加 `gateway.platforms.anp` 配置。
+5. 重启 Hermes gateway。
+6. 报告成功或遇到的错误。
+
+### 手动安装
 
 ```bash
 # 将插件复制/链接到 Hermes 插件目录
@@ -89,6 +106,8 @@ EOF
 ANP_ALLOW_ALL_USERS=1 hermes run
 ```
 
+### 本地启动
+
 当前 OpenSpec 相关命令：
 
 ```bash
@@ -98,6 +117,26 @@ openspec status --change create-anp-hermes-plugin
 # 开始实现该变更
 # /opsx:apply create-anp-hermes-plugin
 ```
+
+### 接入 ANP 测试床
+
+插件安装并重启 Gateway 后，继续在同一对话框中要求 LLM 完成以下测试床配置：
+
+1. 设置环境变量（仅用于测试环境）：
+
+   ```bash
+   export ANP_ALLOW_ALL_USERS=1
+   ```
+
+2. 启动 DID 文档解析服务。插件默认会在 `http://{ANP_HOSTNAME}:{ANP_PORT}/.well-known/did.json` 公开自己的 `did:wba` 文档；若使用外部解析器，可配置：
+
+   ```bash
+   export ANP_DID_RESOLVER_BASE_URL=http://localhost:8900
+   ```
+
+3. 确保 `~/.hermes/config.yaml` 中已配置 LLM provider（真实 LLM 测试需要）。
+
+完成以上步骤后，Hermes 即可作为 ANP 服务智能体被其他智能体发现和调用。
 
 ## 仓库结构
 
