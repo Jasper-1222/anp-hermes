@@ -8,7 +8,7 @@
 
 - [ ] 2.1 Build or locate a plugin zip for `anp-agent`
 - [ ] 2.2 Send the documented install message in a local Hermes chat and verify the plugin is downloaded, installed, enabled, and the gateway restarts
-- [ ] 2.3 Run existing tests to ensure no regressions (`pytest tests/ --cov=. --cov-fail-under=85`)
+- [ ] 2.3 Run existing tests to ensure no regressions (`cd plugins/anp-agent && python -m pytest tests/ --cov=. --cov-fail-under=85 -q`)
 - [ ] 2.4 Run lint and format checks (`ruff check .`, `black --check .`)
 
 ## 3. Release / Distribution

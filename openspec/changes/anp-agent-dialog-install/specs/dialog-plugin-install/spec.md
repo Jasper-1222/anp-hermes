@@ -6,9 +6,9 @@ The system SHALL document how to install the `anp-agent` plugin by sending a zip
 
 #### Scenario: User reads installation docs
 
-- **WHEN** a user opens `plugins/anp-agent/README.md` or `/home/peter/anp-hermes/CLAUDE.md`
+- **WHEN** a user opens `plugins/anp-agent/README.md` or `CLAUDE.md`
 - **THEN** they SHALL find a "对话框安装" / "Dialog Install" section
-- **AND** the section SHALL provide a copy-pasteable message like `安装插件 https://host/downloads/anp-agent.zip`
+- **AND** the section SHALL provide a copy-pasteable message like `安装插件 https://github.com/Jasper-1222/anp-hermes/releases/latest/download/anp-agent.zip`
 - **AND** the section SHALL list the steps the LLM will perform:
   - Download the zip file
   - Inspect `plugin.yaml` and `__init__.py`
