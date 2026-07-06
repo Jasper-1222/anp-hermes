@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+import aiohttp
 from anp.authentication import did_wba_verifier as did_wba_verifier_module
 from anp.authentication.did_wba_verifier import (
     DidWbaVerifier,
@@ -42,11 +43,64 @@ _PUBLIC_KEY_MODE = 0o644
 
 
 class AuthenticationError(Exception):
-    """认证失败时抛出的通用异常，不包含内部详细原因。"""
+    """认证失败时抛出的结构化异常。
+
+    携带 HTTP 状态码、JSON-RPC 错误码与可选 challenge 头，
+    供 server.py 直接构造对外响应，无需反向解析原始异常。
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int = 401,
+        rpc_code: int = -32001,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.rpc_code = rpc_code
+        self.headers = headers
 
 
 # 当前生效的 wrapper 配置；后创建的实例覆盖前一个
 _resolver_config = {"timeout": _DEFAULT_DID_RESOLVE_TIMEOUT, "base_url": None}
+
+
+def _classify_verifier_error(exc: DidWbaVerifierError) -> tuple[str, int, int]:
+    """根据 DidWbaVerifierError 消息与状态码分类认证失败。
+
+    Returns:
+        (对外消息, HTTP 状态码, JSON-RPC 错误码)
+    """
+    message = (exc.args[0] if exc.args else "").lower()
+    status_code = getattr(exc, "status_code", None)
+
+    # DID 文档解析失败：超时、网络错误、HTTPS 解析失败
+    if "resolve did" in message or ("did document" in message and "timeout" in message):
+        return "DID 文档无法解析", 401, -32002
+
+    # 缺少认证头
+    if "missing" in message and any(
+        keyword in message
+        for keyword in ("signature", "authorization", "signature-input", "authentication")
+    ):
+        return "缺少认证头", 401, -32003
+
+    # DID 文档无效：proof / binding / 结构校验失败
+    if any(keyword in message for keyword in ("invalid did document", "proof", "binding")):
+        return "DID 文档无效", 401, -32004
+
+    # 认证方法未授权
+    if "verification method" in message or "not in authentication" in message:
+        return "认证方法未授权", 403, -32005
+
+    # status_code 为 500 且消息无法分类时，回退到内部认证错误
+    if status_code == 500:
+        return "认证服务内部错误", 500, -32006
+
+    # 默认：签名相关错误
+    return "DID WBA 签名无效", 401, -32001
 
 
 def _make_resolver_wrapper(resolve_fn):
@@ -73,6 +127,11 @@ def _make_resolver_wrapper(resolve_fn):
         except asyncio.TimeoutError as exc:
             raise DidWbaVerifierError(
                 "Failed to resolve DID document: timeout",
+                status_code=401,
+            ) from exc
+        except aiohttp.ClientError as exc:
+            raise DidWbaVerifierError(
+                f"Failed to resolve DID document: {exc.__class__.__name__}",
                 status_code=401,
             ) from exc
 
@@ -169,7 +228,7 @@ class ANPAuth:
             调用方 DID 字符串。
 
         Raises:
-            AuthenticationError: 任何认证失败场景均抛出此异常，具体原因写入日志。
+            AuthenticationError: 结构化认证失败异常，携带 status_code、rpc_code、headers。
         """
         try:
             result = await self._verifier.verify_request(
@@ -181,14 +240,44 @@ class ANPAuth:
             caller_did = result.get("did")
             if not isinstance(caller_did, str):
                 logger.error("DidWbaVerifier 返回结果缺少 did 字段: %s", result)
-                raise AuthenticationError("认证失败")
+                raise AuthenticationError(
+                    "DID WBA 签名无效",
+                    status_code=401,
+                    rpc_code=-32001,
+                )
             return caller_did
         except DidWbaVerifierError as exc:
             logger.warning("DID WBA 认证失败: %s", exc)
-            raise AuthenticationError("认证失败") from exc
+            message, status_code, rpc_code = _classify_verifier_error(exc)
+            raise AuthenticationError(
+                message,
+                status_code=status_code,
+                rpc_code=rpc_code,
+                headers=exc.headers,
+            ) from exc
+        except asyncio.TimeoutError as exc:
+            logger.warning("DID 文档解析超时: %s", exc)
+            raise AuthenticationError(
+                "DID 文档无法解析",
+                status_code=401,
+                rpc_code=-32002,
+            ) from exc
+        except aiohttp.ClientError as exc:
+            logger.warning("DID 文档解析网络错误: %s", exc)
+            raise AuthenticationError(
+                "DID 文档无法解析",
+                status_code=401,
+                rpc_code=-32002,
+            ) from exc
+        except AuthenticationError:
+            raise
         except Exception as exc:
             logger.exception("认证过程中发生未预期异常")
-            raise AuthenticationError("认证失败") from exc
+            raise AuthenticationError(
+                "认证服务内部错误",
+                status_code=500,
+                rpc_code=-32006,
+            ) from exc
 
 
 def _generate_rsa_key_pair() -> tuple[str, str]:
