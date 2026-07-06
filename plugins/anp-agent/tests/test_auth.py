@@ -19,7 +19,7 @@ from anp.authentication.did_resolver import resolve_did_document
 from anp.authentication.did_wba import resolve_did_wba_document
 from anp.authentication.did_wba_verifier import DidWbaVerifierError
 
-from auth import AuthenticationError, create_auth
+from auth import AuthenticationError, _resolver_config, create_auth
 from identity import ANPIdentity, load_or_create_identity
 from tests.helpers.did_server import DIDDocumentServer
 from tests.helpers.signing import build_signed_headers
@@ -191,6 +191,8 @@ async def test_did_resolution_timeout_returns_unresolvable_error(
     finally:
         did_wba_verifier_module.resolve_did_wba_document = original_resolver
         os.environ.pop("ANP_DID_RESOLVE_TIMEOUT", None)
+        _resolver_config["timeout"] = 10
+        _resolver_config["base_url"] = None
 
 
 @pytest.mark.asyncio
@@ -277,6 +279,26 @@ async def test_verify_request_non_string_did_returns_invalid_signature(
         auth._verifier.verify_request = original
 
 
+def test_classify_verifier_error_status_code_500_fallback_to_internal_auth() -> None:
+    """status_code 为 500 且消息无法分类时回退到 -32006。"""
+    from auth import _classify_verifier_error
+
+    exc = DidWbaVerifierError("unexpected verifier failure", status_code=500)
+    message, http_status, rpc_code = _classify_verifier_error(exc)
+    assert message == "认证服务内部错误"
+    assert http_status == 500
+    assert rpc_code == -32006
+
+
+def test_classify_verifier_error_status_code_500_with_known_message_still_matches() -> None:
+    """status_code 为 500 但消息可分类时，仍按已知消息映射。"""
+    from auth import _classify_verifier_error
+
+    exc = DidWbaVerifierError("Failed to resolve DID document: timeout", status_code=500)
+    _, _, rpc_code = _classify_verifier_error(exc)
+    assert rpc_code == -32002
+
+
 @pytest.mark.parametrize(
     "message,status_code,expected_code",
     [
@@ -334,3 +356,5 @@ async def test_bad_resolver_base_url_returns_unresolvable_error(
         assert exc_info.value.rpc_code == -32002
     finally:
         os.environ.pop("ANP_DID_RESOLVER_BASE_URL", None)
+        _resolver_config["timeout"] = 10
+        _resolver_config["base_url"] = None

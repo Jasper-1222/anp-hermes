@@ -74,6 +74,7 @@ def _classify_verifier_error(exc: DidWbaVerifierError) -> tuple[str, int, int]:
         (对外消息, HTTP 状态码, JSON-RPC 错误码)
     """
     message = (exc.args[0] if exc.args else "").lower()
+    status_code = getattr(exc, "status_code", None)
 
     # DID 文档解析失败：超时、网络错误、HTTPS 解析失败
     if "resolve did" in message or ("did document" in message and "timeout" in message):
@@ -93,6 +94,10 @@ def _classify_verifier_error(exc: DidWbaVerifierError) -> tuple[str, int, int]:
     # 认证方法未授权
     if "verification method" in message or "not in authentication" in message:
         return "认证方法未授权", 403, -32005
+
+    # status_code 为 500 且消息无法分类时，回退到内部认证错误
+    if status_code == 500:
+        return "认证服务内部错误", 500, -32006
 
     # 默认：签名相关错误
     return "DID WBA 签名无效", 401, -32001
