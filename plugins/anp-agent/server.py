@@ -37,6 +37,10 @@ _ERROR_INTERNAL = -32603
 # ANP 插件自定义认证错误码
 _ERROR_INVALID_SIGNATURE = -32001
 _ERROR_DID_UNRESOLVABLE = -32002
+_ERROR_MISSING_AUTH = -32003
+_ERROR_INVALID_DID_DOCUMENT = -32004
+_ERROR_UNAUTHORIZED_VERIFICATION_METHOD = -32005
+_ERROR_INTERNAL_AUTH = -32006
 
 
 class ANPRPCError(Exception):
@@ -226,25 +230,28 @@ async def _parse_rpc_request(request: web.Request) -> tuple[str, str, dict[str, 
     return rpc_id, method, params
 
 
-def _map_auth_error(exc: AuthenticationError) -> ANPRPCError:
-    """将认证异常映射为 JSON-RPC / HTTP 错误。
+def _map_auth_error(
+    exc: AuthenticationError,
+) -> tuple[ANPRPCError, dict[str, str] | None]:
+    """将结构化认证异常映射为 JSON-RPC / HTTP 错误。
 
-    根据底层异常消息区分签名无效与 DID 无法解析。
+    直接读取 AuthenticationError 携带的元数据，不再反向解析异常字符串。
     """
-    cause = exc.__cause__
-    message = str(exc) or "认证失败"
-    text = f"{type(cause).__name__}: {cause}" if cause else message
+    challenge_headers: dict[str, str] | None = None
+    if exc.status_code == 401 and exc.headers:
+        challenge_headers = {
+            name: value
+            for name, value in exc.headers.items()
+            if name.lower() in ("www-authenticate", "accept-signature")
+        }
 
-    if "Failed to resolve DID document" in text:
-        return ANPRPCError(
-            http_status=401,
-            rpc_code=_ERROR_DID_UNRESOLVABLE,
-            message="DID 文档无法解析",
-        )
-    return ANPRPCError(
-        http_status=401,
-        rpc_code=_ERROR_INVALID_SIGNATURE,
-        message="DID WBA 签名无效",
+    return (
+        ANPRPCError(
+            http_status=exc.status_code,
+            rpc_code=exc.rpc_code,
+            message=str(exc),
+        ),
+        challenge_headers,
     )
 
 
@@ -273,10 +280,11 @@ async def _handle_rpc(request: web.Request) -> web.Response:
         headers = dict(request.headers)
         caller_did = await auth.authenticate(request.method, url, headers, body)
     except AuthenticationError as exc:
-        err = _map_auth_error(exc)
+        err, challenge_headers = _map_auth_error(exc)
         return web.json_response(
             _jsonrpc_error(rpc_id, err.rpc_code, err.message),
             status=err.http_status,
+            headers=challenge_headers,
         )
 
     # 3. 方法路由

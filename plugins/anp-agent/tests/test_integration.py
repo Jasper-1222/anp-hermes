@@ -211,7 +211,7 @@ async def test_rpc_with_invalid_signature_returns_401(anp_app, caller_identity):
 
 @pytest.mark.asyncio
 async def test_rpc_without_signature_returns_401(anp_app):
-    """缺少签名头应返回 HTTP 401。"""
+    """缺少签名头应返回 HTTP 401 与 JSON-RPC -32003。"""
     client: TestClient = anp_app["client"]
 
     body = json.dumps(
@@ -227,7 +227,7 @@ async def test_rpc_without_signature_returns_401(anp_app):
 
     assert resp.status == 401
     data = await resp.json()
-    assert data["error"]["code"] == -32001
+    assert data["error"]["code"] == -32003
 
 
 @pytest.mark.asyncio

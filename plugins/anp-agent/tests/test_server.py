@@ -201,14 +201,13 @@ async def test_post_rpc_unresolvable_did_returns_401_and_minus_32002(
     mock_auth: MagicMock,
 ):
     """DID 无法解析返回 HTTP 401 与 JSON-RPC -32002。"""
-
-    class FakeDidWbaVerifierError(Exception):
-        pass
-
-    exc = FakeDidWbaVerifierError("Failed to resolve DID document")
-    auth_error = AuthenticationError("认证失败")
-    auth_error.__cause__ = exc
-    mock_auth.authenticate = AsyncMock(side_effect=auth_error)
+    mock_auth.authenticate = AsyncMock(
+        side_effect=AuthenticationError(
+            "DID 文档无法解析",
+            status_code=401,
+            rpc_code=-32002,
+        )
+    )
 
     payload = {
         "jsonrpc": "2.0",
@@ -288,3 +287,145 @@ async def test_post_rpc_timeout_returns_200_and_minus_32603(
     assert resp.status == 200
     data = await resp.json()
     assert data["error"]["code"] == -32603
+
+
+@pytest.mark.asyncio
+async def test_post_rpc_missing_auth_returns_401_and_minus_32003(
+    client: TestClient,
+    mock_auth: MagicMock,
+):
+    """缺少认证头返回 HTTP 401 与 JSON-RPC -32003。"""
+    mock_auth.authenticate = AsyncMock(
+        side_effect=AuthenticationError(
+            "缺少认证头",
+            status_code=401,
+            rpc_code=-32003,
+        )
+    )
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "chat",
+        "params": {"message": "你好"},
+        "id": "req-missing-auth",
+    }
+    resp = await client.post("/agent/rpc", data=json.dumps(payload))
+
+    assert resp.status == 401
+    data = await resp.json()
+    assert data["error"]["code"] == -32003
+    assert data["error"]["message"] == "缺少认证头"
+
+
+@pytest.mark.asyncio
+async def test_post_rpc_invalid_did_document_returns_401_and_minus_32004(
+    client: TestClient,
+    mock_auth: MagicMock,
+):
+    """DID 文档无效返回 HTTP 401 与 JSON-RPC -32004。"""
+    mock_auth.authenticate = AsyncMock(
+        side_effect=AuthenticationError(
+            "DID 文档无效",
+            status_code=401,
+            rpc_code=-32004,
+        )
+    )
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "chat",
+        "params": {"message": "你好"},
+        "id": "req-invalid-did",
+    }
+    resp = await client.post("/agent/rpc", data=json.dumps(payload))
+
+    assert resp.status == 401
+    data = await resp.json()
+    assert data["error"]["code"] == -32004
+
+
+@pytest.mark.asyncio
+async def test_post_rpc_unauthorized_verification_method_returns_403_and_minus_32005(
+    client: TestClient,
+    mock_auth: MagicMock,
+):
+    """认证方法未授权返回 HTTP 403 与 JSON-RPC -32005。"""
+    mock_auth.authenticate = AsyncMock(
+        side_effect=AuthenticationError(
+            "认证方法未授权",
+            status_code=403,
+            rpc_code=-32005,
+        )
+    )
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "chat",
+        "params": {"message": "你好"},
+        "id": "req-unauthorized-vm",
+    }
+    resp = await client.post("/agent/rpc", data=json.dumps(payload))
+
+    assert resp.status == 403
+    data = await resp.json()
+    assert data["error"]["code"] == -32005
+
+
+@pytest.mark.asyncio
+async def test_post_rpc_internal_auth_error_returns_500_and_minus_32006(
+    client: TestClient,
+    mock_auth: MagicMock,
+):
+    """认证内部错误返回 HTTP 500 与 JSON-RPC -32006。"""
+    mock_auth.authenticate = AsyncMock(
+        side_effect=AuthenticationError(
+            "认证服务内部错误",
+            status_code=500,
+            rpc_code=-32006,
+        )
+    )
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "chat",
+        "params": {"message": "你好"},
+        "id": "req-internal",
+    }
+    resp = await client.post("/agent/rpc", data=json.dumps(payload))
+
+    assert resp.status == 500
+    data = await resp.json()
+    assert data["error"]["code"] == -32006
+
+
+@pytest.mark.asyncio
+async def test_post_rpc_challenge_headers_forwarded(
+    client: TestClient,
+    mock_auth: MagicMock,
+):
+    """401 响应应转发 WWW-Authenticate 与 Accept-Signature 头。"""
+    mock_auth.authenticate = AsyncMock(
+        side_effect=AuthenticationError(
+            "DID WBA 签名无效",
+            status_code=401,
+            rpc_code=-32001,
+            headers={
+                "WWW-Authenticate": 'Bearer error="invalid_token"',
+                "Accept-Signature": 'sig1=("@method")',
+                "X-Internal": "should-not-forward",
+            },
+        )
+    )
+
+    payload = {
+        "jsonrpc": "2.0",
+        "method": "chat",
+        "params": {"message": "你好"},
+        "id": "req-challenge",
+    }
+    resp = await client.post("/agent/rpc", data=json.dumps(payload))
+
+    assert resp.status == 401
+    assert resp.headers.get("WWW-Authenticate") == 'Bearer error="invalid_token"'
+    assert resp.headers.get("Accept-Signature") == 'sig1=("@method")'
+    assert "X-Internal" not in resp.headers
