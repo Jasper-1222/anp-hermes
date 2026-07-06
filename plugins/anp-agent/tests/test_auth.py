@@ -5,6 +5,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -109,54 +110,54 @@ async def test_valid_signature_returns_caller_did(auth, caller_identity: dict) -
 
 @pytest.mark.asyncio
 async def test_missing_signature_raises(auth) -> None:
-    """缺少认证头时应抛出 AuthenticationError。"""
-    with pytest.raises(AuthenticationError):
+    """缺少认证头时应抛出 -32003。"""
+    with pytest.raises(AuthenticationError) as exc_info:
         await auth.authenticate(
             "POST",
             "http://localhost:8900/agent/rpc",
             {"Content-Type": "application/json"},
             "{}",
         )
+    assert exc_info.value.rpc_code == -32003
+    assert exc_info.value.status_code == 401
 
 
 @pytest.mark.asyncio
 async def test_invalid_signature_raises(auth, caller_identity: dict) -> None:
-    """签名无效时应抛出 AuthenticationError。"""
+    """签名无效时应抛出 -32001。"""
     target_url = "http://localhost:8900/agent/rpc"
     body = json.dumps({"jsonrpc": "2.0", "method": "chat", "params": {}, "id": "1"})
     headers = await build_signed_headers(caller_identity, target_url, body)
 
     headers["Signature"] = "sig1=:invalid_signature:"
 
-    with pytest.raises(AuthenticationError):
+    with pytest.raises(AuthenticationError) as exc_info:
         await auth.authenticate("POST", target_url, headers, body)
+    assert exc_info.value.rpc_code == -32001
 
 
 @pytest.mark.asyncio
-async def test_unresolvable_did_raises(identity: ANPIdentity) -> None:
-    """DID 文档无法解析时应抛出 AuthenticationError。"""
-    original_resolver = resolve_did_wba_document
+async def test_unexpected_exception_returns_internal_auth_error(
+    identity: ANPIdentity,
+) -> None:
+    """认证器内部未预期异常应映射为 -32006。"""
+    auth = create_auth(identity)
 
-    async def _failing_resolver(did: str, verify_proof: bool = False):
-        raise RuntimeError("模拟 DID 文档解析失败")
-
-    did_wba_verifier_module.resolve_did_wba_document = _failing_resolver
+    original = auth._verifier.verify_request
+    auth._verifier.verify_request = AsyncMock(side_effect=RuntimeError("模拟内部错误"))
 
     try:
-        auth = create_auth(identity)
-        with pytest.raises(AuthenticationError):
+        with pytest.raises(AuthenticationError) as exc_info:
             await auth.authenticate(
                 "POST",
                 "http://localhost:8900/agent/rpc",
-                {
-                    "Signature-Input": 'sig1=("@method");created=1;keyid="did:wba:localhost:agent:e1_x#key-1"',
-                    "Signature": "sig1=:AAAA:",
-                },
-                None,
+                {"Content-Type": "application/json"},
+                "{}",
             )
+        assert exc_info.value.rpc_code == -32006
+        assert exc_info.value.status_code == 500
     finally:
-        did_wba_verifier_module.resolve_did_wba_document = original_resolver
-
+        auth._verifier.verify_request = original
 
 @pytest.mark.asyncio
 async def test_did_resolution_timeout_returns_unresolvable_error(

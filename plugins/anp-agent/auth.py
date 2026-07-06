@@ -4,6 +4,7 @@
 并返回调用方 DID。
 """
 
+import aiohttp
 import asyncio
 import logging
 import os
@@ -82,7 +83,8 @@ def _classify_verifier_error(exc: DidWbaVerifierError) -> tuple[str, int, int]:
 
     # 缺少认证头
     if "missing" in message and any(
-        keyword in message for keyword in ("signature", "authorization", "signature-input")
+        keyword in message
+        for keyword in ("signature", "authorization", "signature-input", "authentication")
     ):
         return "缺少认证头", 401, -32003
 
@@ -221,7 +223,7 @@ class ANPAuth:
             调用方 DID 字符串。
 
         Raises:
-            AuthenticationError: 任何认证失败场景均抛出此异常，具体原因写入日志。
+            AuthenticationError: 结构化认证失败异常，携带 status_code、rpc_code、headers。
         """
         try:
             result = await self._verifier.verify_request(
@@ -233,14 +235,42 @@ class ANPAuth:
             caller_did = result.get("did")
             if not isinstance(caller_did, str):
                 logger.error("DidWbaVerifier 返回结果缺少 did 字段: %s", result)
-                raise AuthenticationError("认证失败")
+                raise AuthenticationError(
+                    "DID WBA 签名无效",
+                    status_code=401,
+                    rpc_code=-32001,
+                )
             return caller_did
         except DidWbaVerifierError as exc:
             logger.warning("DID WBA 认证失败: %s", exc)
-            raise AuthenticationError("认证失败") from exc
+            message, status_code, rpc_code = _classify_verifier_error(exc)
+            raise AuthenticationError(
+                message,
+                status_code=status_code,
+                rpc_code=rpc_code,
+                headers=exc.headers,
+            ) from exc
+        except asyncio.TimeoutError as exc:
+            logger.warning("DID 文档解析超时: %s", exc)
+            raise AuthenticationError(
+                "DID 文档无法解析",
+                status_code=401,
+                rpc_code=-32002,
+            ) from exc
+        except aiohttp.ClientError as exc:
+            logger.warning("DID 文档解析网络错误: %s", exc)
+            raise AuthenticationError(
+                "DID 文档无法解析",
+                status_code=401,
+                rpc_code=-32002,
+            ) from exc
         except Exception as exc:
             logger.exception("认证过程中发生未预期异常")
-            raise AuthenticationError("认证失败") from exc
+            raise AuthenticationError(
+                "认证服务内部错误",
+                status_code=500,
+                rpc_code=-32006,
+            ) from exc
 
 
 def _generate_rsa_key_pair() -> tuple[str, str]:
