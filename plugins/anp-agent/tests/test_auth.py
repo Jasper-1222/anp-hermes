@@ -186,12 +186,68 @@ async def test_did_resolution_timeout_returns_unresolvable_error(
                 },
                 None,
             )
-        cause = exc_info.value.__cause__
-        assert cause is not None
-        assert "resolve" in str(cause).lower() or "timeout" in str(cause).lower()
+        assert exc_info.value.rpc_code == -32002
+        assert exc_info.value.status_code == 401
     finally:
         did_wba_verifier_module.resolve_did_wba_document = original_resolver
         os.environ.pop("ANP_DID_RESOLVE_TIMEOUT", None)
+
+
+@pytest.mark.asyncio
+async def test_unresolvable_did_raises(identity: ANPIdentity) -> None:
+    """DID 文档无法解析时应抛出 -32002。"""
+    original_resolver = resolve_did_wba_document
+
+    async def _failing_resolver(did: str, verify_proof: bool = False):
+        raise DidWbaVerifierError(
+            "Failed to resolve DID document: mocked failure",
+            status_code=401,
+        )
+
+    did_wba_verifier_module.resolve_did_wba_document = _failing_resolver
+
+    try:
+        auth = create_auth(identity)
+        with pytest.raises(AuthenticationError) as exc_info:
+            await auth.authenticate(
+                "POST",
+                "http://localhost:8900/agent/rpc",
+                {
+                    "Signature-Input": 'sig1=("@method");created=1;keyid="did:wba:localhost:agent:e1_x#key-1"',
+                    "Signature": "sig1=:AAAA:",
+                },
+                None,
+            )
+        assert exc_info.value.rpc_code == -32002
+    finally:
+        did_wba_verifier_module.resolve_did_wba_document = original_resolver
+
+
+@pytest.mark.asyncio
+async def test_verify_request_missing_did_returns_invalid_signature(
+    identity: ANPIdentity,
+) -> None:
+    """verify_request 返回结果缺少 did 字段时应返回 -32001。"""
+    auth = create_auth(identity)
+
+    original = auth._verifier.verify_request
+    auth._verifier.verify_request = AsyncMock(return_value={})
+
+    try:
+        with pytest.raises(AuthenticationError) as exc_info:
+            await auth.authenticate(
+                "POST",
+                "http://localhost:8900/agent/rpc",
+                {
+                    "Signature-Input": 'sig1=("@method");created=1;keyid="did:wba:localhost:agent:e1_x#key-1"',
+                    "Signature": "sig1=:AAAA:",
+                },
+                None,
+            )
+        assert exc_info.value.rpc_code == -32001
+        assert exc_info.value.status_code == 401
+    finally:
+        auth._verifier.verify_request = original
 
 
 @pytest.mark.parametrize(

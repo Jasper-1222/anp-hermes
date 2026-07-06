@@ -228,6 +228,7 @@ async def test_rpc_without_signature_returns_401(anp_app):
     assert resp.status == 401
     data = await resp.json()
     assert data["error"]["code"] == -32003
+    assert data["error"]["message"] == "缺少认证头"
 
 
 @pytest.mark.asyncio
