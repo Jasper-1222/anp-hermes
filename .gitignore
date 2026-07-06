@@ -49,3 +49,6 @@ htmlcov/
 
 # Plugin distribution artifacts
 *.zip
+
+# SDD / superpowers scratch
+.superpowers/
