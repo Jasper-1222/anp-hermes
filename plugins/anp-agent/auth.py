@@ -124,6 +124,11 @@ def _make_resolver_wrapper(resolve_fn):
                 "Failed to resolve DID document: timeout",
                 status_code=401,
             ) from exc
+        except aiohttp.ClientError as exc:
+            raise DidWbaVerifierError(
+                f"Failed to resolve DID document: {exc.__class__.__name__}",
+                status_code=401,
+            ) from exc
 
     _resolver_wrapper._anp_auth_wrapper = True  # noqa: SLF001
     return _resolver_wrapper

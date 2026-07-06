@@ -228,3 +228,26 @@ async def test_authentication_error_carries_structured_fields() -> None:
     assert exc.status_code == 401
     assert exc.rpc_code == -32003
     assert exc.headers == {"WWW-Authenticate": "test"}
+
+
+@pytest.mark.asyncio
+async def test_bad_resolver_base_url_returns_unresolvable_error(
+    identity: ANPIdentity,
+) -> None:
+    """错误的 ANP_DID_RESOLVER_BASE_URL 应映射为 -32002。"""
+    os.environ["ANP_DID_RESOLVER_BASE_URL"] = "http://127.0.0.1:1"
+    try:
+        auth = create_auth(identity)
+        with pytest.raises(AuthenticationError) as exc_info:
+            await auth.authenticate(
+                "POST",
+                "http://localhost:8900/agent/rpc",
+                {
+                    "Signature-Input": 'sig1=("@method");created=1;keyid="did:wba:localhost:agent:e1_x#key-1"',
+                    "Signature": "sig1=:AAAA:",
+                },
+                None,
+            )
+        assert exc_info.value.rpc_code == -32002
+    finally:
+        os.environ.pop("ANP_DID_RESOLVER_BASE_URL", None)
