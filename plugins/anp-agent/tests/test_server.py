@@ -213,7 +213,7 @@ async def test_post_rpc_unresolvable_did_returns_401_and_minus_32002(
         "jsonrpc": "2.0",
         "method": "chat",
         "params": {"message": "你好"},
-        "id": "req-4",
+        "id": "req-unresolvable",
     }
     resp = await client.post("/agent/rpc", data=json.dumps(payload))
 
