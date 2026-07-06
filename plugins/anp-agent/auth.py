@@ -42,7 +42,24 @@ _PUBLIC_KEY_MODE = 0o644
 
 
 class AuthenticationError(Exception):
-    """认证失败时抛出的通用异常，不包含内部详细原因。"""
+    """认证失败时抛出的结构化异常。
+
+    携带 HTTP 状态码、JSON-RPC 错误码与可选 challenge 头，
+    供 server.py 直接构造对外响应，无需反向解析原始异常。
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int = 401,
+        rpc_code: int = -32001,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.status_code = status_code
+        self.rpc_code = rpc_code
+        self.headers = headers
 
 
 # 当前生效的 wrapper 配置；后创建的实例覆盖前一个

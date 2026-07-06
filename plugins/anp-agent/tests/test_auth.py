@@ -189,3 +189,18 @@ async def test_did_resolution_timeout_returns_unresolvable_error(
     finally:
         did_wba_verifier_module.resolve_did_wba_document = original_resolver
         os.environ.pop("ANP_DID_RESOLVE_TIMEOUT", None)
+
+
+@pytest.mark.asyncio
+async def test_authentication_error_carries_structured_fields() -> None:
+    """AuthenticationError 应携带结构化字段。"""
+    exc = AuthenticationError(
+        "缺少认证头",
+        status_code=401,
+        rpc_code=-32003,
+        headers={"WWW-Authenticate": "test"},
+    )
+    assert str(exc) == "缺少认证头"
+    assert exc.status_code == 401
+    assert exc.rpc_code == -32003
+    assert exc.headers == {"WWW-Authenticate": "test"}
