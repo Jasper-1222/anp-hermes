@@ -66,6 +66,41 @@ class AuthenticationError(Exception):
 _resolver_config = {"timeout": _DEFAULT_DID_RESOLVE_TIMEOUT, "base_url": None}
 
 
+def _classify_verifier_error(exc: DidWbaVerifierError) -> tuple[str, int, int]:
+    """根据 DidWbaVerifierError 消息与状态码分类认证失败。
+
+    Returns:
+        (对外消息, HTTP 状态码, JSON-RPC 错误码)
+    """
+    message = (exc.args[0] if exc.args else "").lower()
+
+    # DID 文档解析失败：超时、网络错误、HTTPS 解析失败
+    if "resolve did" in message or (
+        "did document" in message and "timeout" in message
+    ):
+        return "DID 文档无法解析", 401, -32002
+
+    # 缺少认证头
+    if "missing" in message and any(
+        keyword in message for keyword in ("signature", "authorization", "signature-input")
+    ):
+        return "缺少认证头", 401, -32003
+
+    # DID 文档无效：proof / binding / 结构校验失败
+    if any(
+        keyword in message
+        for keyword in ("invalid did document", "proof", "binding")
+    ):
+        return "DID 文档无效", 401, -32004
+
+    # 认证方法未授权
+    if "verification method" in message or "not in authentication" in message:
+        return "认证方法未授权", 403, -32005
+
+    # 默认：签名相关错误
+    return "DID WBA 签名无效", 401, -32001
+
+
 def _make_resolver_wrapper(resolve_fn):
     """创建支持超时与 base URL 覆盖的 resolver wrapper。
 

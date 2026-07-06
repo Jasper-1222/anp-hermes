@@ -16,6 +16,7 @@ from anp.authentication import create_did_wba_document
 from anp.authentication import did_wba_verifier as did_wba_verifier_module
 from anp.authentication.did_resolver import resolve_did_document
 from anp.authentication.did_wba import resolve_did_wba_document
+from anp.authentication.did_wba_verifier import DidWbaVerifierError
 
 from auth import AuthenticationError, create_auth
 from identity import ANPIdentity, load_or_create_identity
@@ -189,6 +190,27 @@ async def test_did_resolution_timeout_returns_unresolvable_error(
     finally:
         did_wba_verifier_module.resolve_did_wba_document = original_resolver
         os.environ.pop("ANP_DID_RESOLVE_TIMEOUT", None)
+
+
+@pytest.mark.parametrize(
+    "message,status_code,expected_code",
+    [
+        ("Failed to resolve DID document: timeout", 401, -32002),
+        ("Missing Signature-Input header", 401, -32003),
+        ("Missing Signature header", 401, -32003),
+        ("Invalid DID document proof", 401, -32004),
+        ("Verification method not in authentication", 401, -32005),
+        ("Signature verification failed", 401, -32001),
+        ("Nonce verification failed", 401, -32001),
+    ],
+)
+def test_classify_verifier_error_maps_known_errors(message, status_code, expected_code) -> None:
+    """已知 verifier 错误应映射到正确错误码。"""
+    from auth import _classify_verifier_error
+
+    exc = DidWbaVerifierError(message, status_code=status_code)
+    _, _, rpc_code = _classify_verifier_error(exc)
+    assert rpc_code == expected_code
 
 
 @pytest.mark.asyncio
