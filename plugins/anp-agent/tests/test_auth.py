@@ -250,6 +250,33 @@ async def test_verify_request_missing_did_returns_invalid_signature(
         auth._verifier.verify_request = original
 
 
+@pytest.mark.asyncio
+async def test_verify_request_non_string_did_returns_invalid_signature(
+    identity: ANPIdentity,
+) -> None:
+    """verify_request 返回 did 字段非字符串时应返回 -32001。"""
+    auth = create_auth(identity)
+
+    original = auth._verifier.verify_request
+    auth._verifier.verify_request = AsyncMock(return_value={"did": 123})
+
+    try:
+        with pytest.raises(AuthenticationError) as exc_info:
+            await auth.authenticate(
+                "POST",
+                "http://localhost:8900/agent/rpc",
+                {
+                    "Signature-Input": 'sig1=("@method");created=1;keyid="did:wba:localhost:agent:e1_x#key-1"',
+                    "Signature": "sig1=:AAAA:",
+                },
+                None,
+            )
+        assert exc_info.value.rpc_code == -32001
+        assert exc_info.value.status_code == 401
+    finally:
+        auth._verifier.verify_request = original
+
+
 @pytest.mark.parametrize(
     "message,status_code,expected_code",
     [
