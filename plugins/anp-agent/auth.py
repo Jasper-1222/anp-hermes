@@ -4,13 +4,13 @@
 并返回调用方 DID。
 """
 
-import aiohttp
 import asyncio
 import logging
 import os
 from pathlib import Path
 from typing import Any
 
+import aiohttp
 from anp.authentication import did_wba_verifier as did_wba_verifier_module
 from anp.authentication.did_wba_verifier import (
     DidWbaVerifier,
@@ -76,9 +76,7 @@ def _classify_verifier_error(exc: DidWbaVerifierError) -> tuple[str, int, int]:
     message = (exc.args[0] if exc.args else "").lower()
 
     # DID 文档解析失败：超时、网络错误、HTTPS 解析失败
-    if "resolve did" in message or (
-        "did document" in message and "timeout" in message
-    ):
+    if "resolve did" in message or ("did document" in message and "timeout" in message):
         return "DID 文档无法解析", 401, -32002
 
     # 缺少认证头
@@ -89,10 +87,7 @@ def _classify_verifier_error(exc: DidWbaVerifierError) -> tuple[str, int, int]:
         return "缺少认证头", 401, -32003
 
     # DID 文档无效：proof / binding / 结构校验失败
-    if any(
-        keyword in message
-        for keyword in ("invalid did document", "proof", "binding")
-    ):
+    if any(keyword in message for keyword in ("invalid did document", "proof", "binding")):
         return "DID 文档无效", 401, -32004
 
     # 认证方法未授权
@@ -264,6 +259,8 @@ class ANPAuth:
                 status_code=401,
                 rpc_code=-32002,
             ) from exc
+        except AuthenticationError:
+            raise
         except Exception as exc:
             logger.exception("认证过程中发生未预期异常")
             raise AuthenticationError(

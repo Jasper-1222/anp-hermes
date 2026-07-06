@@ -159,6 +159,7 @@ async def test_unexpected_exception_returns_internal_auth_error(
     finally:
         auth._verifier.verify_request = original
 
+
 @pytest.mark.asyncio
 async def test_did_resolution_timeout_returns_unresolvable_error(
     identity: ANPIdentity,
