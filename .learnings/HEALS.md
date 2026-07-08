@@ -63,3 +63,51 @@ Observed:
 - First-Seen / Last-Seen: 2026-07-08
 
 ---
+
+## [HEAL-20260708-002] github_https_push_timeout
+
+**Logged**: 2026-07-08T16:44:23+08:00
+**Status**: verified
+**Trigger**: external-change
+**Active-Context**: ship push to master
+**Area**: git/github
+**Priority**: medium
+
+### Failure
+`git push origin master` failed while pushing the merged `master` branch:
+
+```text
+fatal: unable to access 'https://github.com/Jasper-1222/anp-hermes.git/': Failed to connect to github.com port 443 after 136905 ms: Couldn't connect to server
+```
+
+### Diagnosis
+The repository state and verification gate were clean before pushing, so the failure was not caused by local git state. A direct WSL2 socket probe to `github.com:443` later succeeded, showing the issue was transient HTTPS connectivity to GitHub rather than a repository or credential problem.
+
+### Fix
+No project file patch was needed. Retried the push after confirming `github.com:443` connectivity:
+
+```bash
+python3 - <<'PY2'
+import socket
+s=socket.socket(); s.settimeout(20); s.connect(('github.com', 443)); s.close()
+PY2
+git push origin master
+```
+
+### Verification
+The connectivity probe returned `connect ok`, and the retry returned:
+
+```text
+Everything up-to-date
+```
+
+This verified that the previous push had reached the remote or the remote had become synchronized by the time connectivity recovered.
+
+### Metadata
+- Related Files: none
+- See Also: none
+- Pattern-Key: external.github_https_timeout
+- Recurrence-Count: 1
+- First-Seen / Last-Seen: 2026-07-08
+
+---
