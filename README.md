@@ -50,6 +50,12 @@ python3 -m pytest tests/e2e/test_echo.py -v --run-e2e
 # 阶段二：真实 LLM E2E（慢速，可选）
 # 需要 ~/.hermes/config.yaml 中配置 model.provider，并设置对应 provider 的 API key 环境变量
 python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
+
+# 也可临时覆盖 provider，不修改 ~/.hermes/config.yaml
+ANP_E2E_LLM_PROVIDER="kimi" \
+ANP_E2E_LLM_API="https://api.kimi.com/coding/v1" \
+ANP_E2E_LLM_KEY_ENV="KIMI_API_KEY" \
+python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
 ```
 
 ## 本地启动 Hermes + ANP 插件
@@ -113,9 +119,11 @@ gateway:
 │   │   ├── bridge.py       # ANP JSON-RPC ↔ Hermes 桥接
 │   │   ├── config.py       # 配置加载
 │   │   ├── identity.py     # DID WBA 身份管理
-│   │   └── server.py       # aiohttp HTTP 端点
+│   │   ├── server.py       # aiohttp HTTP 端点
+│   │   └── tools.py        # 可选 Hermes tool RPC 策略与执行
 │   ├── tests/              # 单元、集成与 E2E 测试
 │   └── README.md           # 插件详细说明
+├── docs/                    # 当前实现分析、OpenSpec 路线图与执行状态
 ├── openspec/               # OpenSpec 规划产物
 │   ├── specs/              # 当前 capability spec
 │   └── changes/            # 活跃变更与 archive/ 已归档变更
