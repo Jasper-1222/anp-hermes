@@ -1,12 +1,6 @@
 """ANP Agent 平台插件入口。"""
 
-import sys
-from pathlib import Path
 from typing import Any
-
-# Hermes 以 namespace package 加载本插件，插件目录不会自动进入 sys.path，
-# 因此需要显式加入，以保证插件内部各模块的绝对导入可解析。
-sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 _REQUIRED_ENV = ["ANP_ALLOW_ALL_USERS"]
 
@@ -17,7 +11,7 @@ def register(ctx: Any) -> None:
     Args:
         ctx: Hermes 插件上下文对象。
     """
-    from adapter import ANPAdapter
+    from .anp_agent.adapter import ANPAdapter
 
     ctx.register_platform(
         name="anp",

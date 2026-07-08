@@ -14,12 +14,6 @@ import pytest
 from tests.helpers.signing import build_signed_headers
 
 
-def _skip_without_slow_e2e(request: pytest.FixtureRequest) -> None:
-    """未传 --run-slow-e2e 时跳过慢速 LLM E2E 测试。"""
-    if not request.config.getoption("--run-slow-e2e"):
-        pytest.skip("需要 --run-slow-e2e 选项才能运行 LLM E2E 测试")
-
-
 async def _signed_chat(
     session: aiohttp.ClientSession,
     endpoint: str,
@@ -55,13 +49,11 @@ async def _signed_chat(
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_llm_single_turn_chat(
-    request: pytest.FixtureRequest,
     llm_hermes_gateway,
     anp_caller_identity,
     did_document_server,
 ):
     """单轮 chat 应返回非空、无 error 的有效响应。"""
-    _skip_without_slow_e2e(request)
 
     async with aiohttp.ClientSession() as session:
         data = await _signed_chat(
@@ -78,13 +70,11 @@ async def test_llm_single_turn_chat(
 @pytest.mark.asyncio
 @pytest.mark.slow
 async def test_llm_multi_turn_chat(
-    request: pytest.FixtureRequest,
     llm_hermes_gateway,
     anp_caller_identity,
     did_document_server,
 ):
     """同一 caller DID 的多轮对话应保留上下文。"""
-    _skip_without_slow_e2e(request)
 
     async with aiohttp.ClientSession() as session:
         await _signed_chat(

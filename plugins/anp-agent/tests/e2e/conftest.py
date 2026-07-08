@@ -6,13 +6,9 @@ import json
 import os
 import socket
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any
-
-# 插件目录名包含连字符，无法作为 Python 包导入，因此将插件根目录加入搜索路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 import pytest_asyncio
@@ -149,6 +145,8 @@ def _start_hermes_gateway(
     # 1. 准备临时 HERMES_HOME
     hermes_home = tmp_path / "hermes_home"
     hermes_home.mkdir(parents=True, exist_ok=True)
+    process_home = hermes_home / "home"
+    process_home.mkdir(parents=True, exist_ok=True)
     plugins_dir = hermes_home / "plugins"
     plugins_dir.mkdir(exist_ok=True)
     skills_dir = hermes_home / "skills"
@@ -165,13 +163,16 @@ def _start_hermes_gateway(
         echo_skill_src = Path(__file__).resolve().parent / "data" / "anp-echo"
         echo_skill_dst.symlink_to(echo_skill_src, target_is_directory=True)
 
-    # 4. 从真实配置复制 model/provider，并覆盖必要项
+    # 4. 写入 Hermes 配置
     port = free_port()
-    user_config = _load_user_hermes_config()
-    if not user_config:
-        pytest.skip("未找到 ~/.hermes/config.yaml，无法运行 E2E 测试")
+    if use_mock_llm:
+        config: dict[str, Any] = {}
+    else:
+        user_config = _load_user_hermes_config()
+        if not user_config:
+            pytest.skip("未找到 ~/.hermes/config.yaml，无法运行 LLM E2E 测试")
+        config = dict(user_config)
 
-    config = dict(user_config)
     config.setdefault("gateway", {})
     config["gateway"]["platforms"] = {
         "anp": {
@@ -236,6 +237,7 @@ def _start_hermes_gateway(
     # 5. 启动 hermes gateway run 子进程
     env = os.environ.copy()
     env["HERMES_HOME"] = str(hermes_home)
+    env["HOME"] = str(hermes_home / "home")
     env["ANP_ALLOW_ALL_USERS"] = "1"
     env["ANP_DID_RESOLVER_BASE_URL"] = did_document_server.base_url
     if use_mock_llm:
@@ -328,21 +330,18 @@ _PROVIDER_API_KEY_ENV = {
 }
 
 
-@pytest.fixture
-def llm_hermes_gateway(
-    tmp_path: Path,
-    did_document_server: DIDDocumentServer,
-):
-    """启动真实 Hermes gateway，使用真实 LLM provider（阶段二）。"""
+def _validate_llm_e2e_prerequisites(config) -> dict[str, Any]:
+    """检查真实 LLM E2E 前置条件，失败时在启动 gateway 前 skip。"""
+    if not config.getoption("--run-slow-e2e"):
+        pytest.skip("需要 --run-slow-e2e 选项才能运行 LLM E2E 测试")
+
     user_config = _load_user_hermes_config()
     model_cfg = user_config.get("model", {})
     provider = model_cfg.get("provider", "")
     if not provider:
         pytest.skip("真实 ~/.hermes/config.yaml 未配置 model.provider，跳过 LLM E2E 测试")
 
-    # 检查对应 provider 的 API key 是否可用，避免无 key 时调用失败
     key_env = _PROVIDER_API_KEY_ENV.get(provider.lower())
-    # 如果通过环境变量覆盖 provider，以覆盖后的配置为准
     override_key_env = os.environ.get("ANP_E2E_LLM_KEY_ENV", "")
     if override_key_env:
         key_env = override_key_env
@@ -350,6 +349,18 @@ def llm_hermes_gateway(
         pytest.skip(
             f"LLM E2E 测试需要环境变量 {key_env or '对应 API KEY'}（当前 provider={provider}），未设置则跳过"
         )
+
+    return user_config
+
+
+@pytest.fixture
+def llm_hermes_gateway(
+    request: pytest.FixtureRequest,
+    tmp_path: Path,
+    did_document_server: DIDDocumentServer,
+):
+    """启动真实 Hermes gateway，使用真实 LLM provider（阶段二）。"""
+    _validate_llm_e2e_prerequisites(request.config)
 
     gateway = _start_hermes_gateway(
         tmp_path,

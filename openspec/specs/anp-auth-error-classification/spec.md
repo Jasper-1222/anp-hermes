@@ -22,7 +22,7 @@
   | `-32006` | 500 | 认证服务内部错误 |
 
 ### Requirement: AuthenticationError 结构
-`AuthenticationError` SHALL 携带 `status_code`、`rpc_code`、`message`、`headers` 与 `cause`，供调用方无需重新解析字符串即可构造响应。
+`AuthenticationError` SHALL 携带 `status_code`、`rpc_code`、`message` 与 `headers`，供调用方无需重新解析字符串即可构造响应。
 
 #### Scenario: 构造结构化异常
 - **WHEN** 认证器检测到具体失败原因
@@ -52,11 +52,20 @@
 - **THEN** 分类为 `-32005 认证方法未授权`
 
 ### Requirement: Resolver 网络错误包装
-`ANPAuth` 的 resolver wrapper SHALL 将 `aiohttp.ClientError` 与 `asyncio.TimeoutError` 统一包装为 `DidWbaVerifierError("Failed to resolve DID document: ...", status_code=401)`，确保其被分类为 DID 文档解析失败。
+`ANPAuth` 的 resolver wrapper SHALL 将 `aiohttp.ClientError` 与 `asyncio.TimeoutError` 统一包装为 `DidWbaVerifierError("Failed to resolve DID document: ...", status_code=401)`，确保其被分类为 DID 文档解析失败。resolver wrapper SHALL 将 DID Document `id` mismatch、proof、binding 或结构校验失败包装为 `DidWbaVerifierError("Invalid DID document: ...", status_code=401)`，确保其被分类为 DID 文档无效。resolver policy/config 错误 SHALL 在初始化时 fail fast 或映射为安全内部错误，不得向远端调用方泄露内部配置。
 
 #### Scenario: 错误的 resolver base URL
-- **WHEN** `ANP_DID_RESOLVER_BASE_URL` 指向不可达地址并触发 `aiohttp.ClientError`
+- **WHEN** `ANP_DID_RESOLVER_BASE_URL` 指向不可达 loopback 地址并触发 `aiohttp.ClientError`
 - **THEN** 认证器抛出 `-32002 DID 文档无法解析`，而非 `-32001 DID WBA 签名无效`
+
+#### Scenario: DID Document binding 校验失败
+- **WHEN** resolver 获取到 DID Document 但 SDK 校验返回 proof 或 binding 失败
+- **THEN** 认证器抛出 `-32004 DID 文档无效`，而非 `-32006 认证服务内部错误`
+
+#### Scenario: resolver policy 初始化失败不外泄
+- **WHEN** resolver override 配置违反本地测试策略并在 `ANPAuth` 初始化时失败
+- **THEN** 错误信息 SHALL 面向本地运维诊断
+- **AND** 不得通过 `/agent/rpc` 响应向远端调用方泄露内部配置值
 
 ### Requirement: 安全响应约束
 对外响应 SHALL 仅暴露规范定义的错误码与消息；内部 URL、原始网络异常消息、堆栈或 JWT 密钥信息不得泄露给调用方。
@@ -66,7 +75,7 @@
 - **THEN** 记录日志后对外返回 `-32006 认证服务内部错误`，且不包含堆栈信息
 
 ### Requirement: Challenge 头转发
-当认证失败且 `DidWbaVerifierError` 返回 HTTP 401 响应头时，适配器 MAY 将 `WWW-Authenticate` 和 `Accept-Signature` 头转发给调用方。
+当认证失败且 `DidWbaVerifierError` 返回 HTTP 401 响应头时，适配器 SHALL 将 `WWW-Authenticate` 和 `Accept-Signature` 头转发给调用方。
 
 #### Scenario: 转发 challenge 头
 - **WHEN** verifier 响应包含 `WWW-Authenticate` 或 `Accept-Signature` 头

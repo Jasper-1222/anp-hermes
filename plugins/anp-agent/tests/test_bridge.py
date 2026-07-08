@@ -1,16 +1,11 @@
 """ANP RPC 桥接层单元测试。"""
 
 import asyncio
-import os
-import sys
 
 import pytest
 
-# 插件目录名包含连字符，无法作为 Python 包导入，因此将插件根目录加入搜索路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from bridge import ANPBridge, MessageEvent
-from config import ANPConfig
+from anp_agent.bridge import ANPBridge, ANPBridgeError, MessageEvent
+from anp_agent.config import ANPConfig
 
 
 def _config(**kwargs) -> ANPConfig:
@@ -30,10 +25,13 @@ def _config(**kwargs) -> ANPConfig:
 
 @pytest.mark.asyncio
 async def test_call_returns_handler_set_content():
-    """call() 应返回 message_handler 通过 set_result 设置的内容。"""
+    """call() 应返回 message_handler 通过内部 request id 设置的内容。"""
     bridge = None
+    captured_event = None
 
     def handler(event: MessageEvent) -> None:
+        nonlocal captured_event
+        captured_event = event
         bridge.set_result(event.message_id, "你好，世界")
 
     config = _config(request_timeout=1)
@@ -42,56 +40,73 @@ async def test_call_returns_handler_set_content():
     result = await bridge.call("rpc-1", "chat", {"message": "hi"}, "did:wba:alice")
 
     assert result == "你好，世界"
-    assert "rpc-1" not in bridge._pending
+    assert captured_event is not None
+    assert captured_event.message_id == "req-1"
+    assert captured_event.metadata["anp_rpc_id"] == "rpc-1"
+    assert captured_event.metadata["anp_request_id"] == "req-1"
+    assert captured_event.metadata["anp_method"] == "chat"
+    assert captured_event.metadata["anp_params"] == {"message": "hi"}
+    assert captured_event.metadata["anp_caller_did"] == "did:wba:alice"
+    assert "req-1" not in bridge._pending
 
 
 @pytest.mark.asyncio
-async def test_duplicate_rpc_id_raises_value_error():
-    """重复 rpc_id 应抛出 ValueError。"""
+async def test_same_client_rpc_id_can_run_concurrently():
+    """相同客户端 rpc_id 的并发调用应使用不同内部 request id 隔离。"""
+    captured_events: list[MessageEvent] = []
 
     def handler(event: MessageEvent) -> None:
-        pass
+        captured_events.append(event)
 
     config = _config(request_timeout=10)
     bridge = ANPBridge(config, handler)
 
     first = asyncio.create_task(bridge.call("dup", "chat", {}, "did:wba:alice"))
-    await asyncio.sleep(0)  # 让第一次调用注册 pending
+    second = asyncio.create_task(bridge.call("dup", "chat", {}, "did:wba:bob"))
+    await asyncio.sleep(0)
 
-    with pytest.raises(ValueError):
-        await bridge.call("dup", "chat", {}, "did:wba:bob")
+    assert sorted(bridge._pending.keys()) == ["req-1", "req-2"]
+    assert [event.metadata["anp_rpc_id"] for event in captured_events] == ["dup", "dup"]
+    assert [event.metadata["anp_request_id"] for event in captured_events] == [
+        "req-1",
+        "req-2",
+    ]
 
-    bridge.set_result("dup", "ok")
-    assert await first == "ok"
+    bridge.set_result("req-2", "bob-ok")
+    bridge.set_result("req-1", "alice-ok")
+    assert await first == "alice-ok"
+    assert await second == "bob-ok"
 
 
 @pytest.mark.asyncio
-async def test_pending_capacity_limit_raises_runtime_error():
-    """pending futures 超过上限时应抛出 RuntimeError。"""
+async def test_pending_capacity_limit_raises_bridge_error():
+    """pending futures 超过上限时应抛出结构化 bridge 错误。"""
 
     def handler(event: MessageEvent) -> None:
         pass
 
     config = _config(request_timeout=60)
-    bridge = ANPBridge(config, handler)
-    bridge._max_pending = 2
+    bridge = ANPBridge(config, handler, max_pending=2)
 
     task1 = asyncio.create_task(bridge.call("a", "chat", {}, "did:wba:alice"))
     task2 = asyncio.create_task(bridge.call("b", "chat", {}, "did:wba:bob"))
     await asyncio.sleep(0)
 
-    with pytest.raises(RuntimeError):
+    with pytest.raises(ANPBridgeError) as exc_info:
         await bridge.call("c", "chat", {}, "did:wba:charlie")
 
-    bridge.set_result("a", "r1")
-    bridge.set_result("b", "r2")
+    assert exc_info.value.rpc_code == -32603
+    assert "服务繁忙" in exc_info.value.message
+
+    bridge.set_result("req-1", "r1")
+    bridge.set_result("req-2", "r2")
     assert await task1 == "r1"
     assert await task2 == "r2"
 
 
 @pytest.mark.asyncio
-async def test_call_timeout_returns_error():
-    """call() 超时后应返回通用超时错误，而非抛出未处理异常。"""
+async def test_call_timeout_raises_bridge_error():
+    """call() 超时后应抛出结构化 bridge 错误。"""
 
     def handler(event: MessageEvent) -> None:
         pass
@@ -99,10 +114,30 @@ async def test_call_timeout_returns_error():
     config = _config(request_timeout=1)
     bridge = ANPBridge(config, handler)
 
-    result = await bridge.call("to", "chat", {"message": "hi"}, "did:wba:alice")
+    with pytest.raises(ANPBridgeError) as exc_info:
+        await bridge.call("to", "chat", {"message": "hi"}, "did:wba:alice")
 
-    assert "超时" in result
-    assert "to" not in bridge._pending
+    assert exc_info.value.rpc_code == -32603
+    assert "超时" in exc_info.value.message
+    assert "req-1" not in bridge._pending
+
+
+@pytest.mark.asyncio
+async def test_handler_exception_raises_bridge_error():
+    """message_handler 异常应抛出结构化 bridge 错误。"""
+
+    def handler(event: MessageEvent) -> None:
+        raise RuntimeError("模拟提交失败")
+
+    config = _config(request_timeout=1)
+    bridge = ANPBridge(config, handler)
+
+    with pytest.raises(ANPBridgeError) as exc_info:
+        await bridge.call("err", "chat", {}, "did:wba:alice")
+
+    assert exc_info.value.rpc_code == -32603
+    assert "无法将请求提交给 Hermes" in exc_info.value.message
+    assert "req-1" not in bridge._pending
 
 
 @pytest.mark.asyncio
@@ -119,20 +154,21 @@ async def test_cleanup_removes_expired_futures():
     try:
         task = asyncio.create_task(bridge.call("exp", "chat", {}, "did:wba:alice"))
         await asyncio.sleep(0)
-        assert "exp" in bridge._pending
+        assert "req-1" in bridge._pending
 
         await asyncio.sleep(2.5)
-        assert "exp" not in bridge._pending
+        assert "req-1" not in bridge._pending
 
-        result = await asyncio.wait_for(task, timeout=2)
-        assert "超时" in result or "过期" in result or "内部错误" in result
+        with pytest.raises(ANPBridgeError) as exc_info:
+            await asyncio.wait_for(task, timeout=2)
+        assert exc_info.value.rpc_code == -32603
     finally:
         await bridge.stop()
 
 
 @pytest.mark.asyncio
 async def test_stop_cancels_unfinished_futures():
-    """stop() 应取消所有未完成的 futures 并清空 pending。"""
+    """stop() 应取消所有未完成的 futures 并让等待者收到结构化错误。"""
 
     def handler(event: MessageEvent) -> None:
         pass
@@ -149,5 +185,26 @@ async def test_stop_cancels_unfinished_futures():
     await bridge.stop()
 
     assert len(bridge._pending) == 0
-    assert task1.done()
-    assert task2.done()
+    for task in (task1, task2):
+        with pytest.raises(ANPBridgeError) as exc_info:
+            await task
+        assert "取消" in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_external_task_cancellation_is_not_wrapped():
+    """外部取消 call() 任务时应保留 asyncio cancellation 语义。"""
+
+    def handler(event: MessageEvent) -> None:
+        pass
+
+    config = _config(request_timeout=60)
+    bridge = ANPBridge(config, handler)
+
+    task = asyncio.create_task(bridge.call("x", "chat", {}, "did:wba:alice"))
+    await asyncio.sleep(0)
+    task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert len(bridge._pending) == 0

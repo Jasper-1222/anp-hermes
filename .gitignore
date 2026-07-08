@@ -50,5 +50,11 @@ htmlcov/
 # Plugin distribution artifacts
 *.zip
 
+# ANP runtime identity files
+plugins/anp-agent/did.json
+plugins/anp-agent/*.pem
+plugins/anp-agent/*.tmp
+plugins/anp-agent/*.bak.*
+
 # SDD / superpowers scratch
 .superpowers/

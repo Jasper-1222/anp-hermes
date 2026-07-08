@@ -3,15 +3,11 @@
 import json
 import os
 import stat
-import sys
 from pathlib import Path
 
 import pytest
 
-# 插件目录名包含连字符，无法作为 Python 包导入，因此将插件根目录加入搜索路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from identity import (
+from anp_agent.identity import (
     _is_valid_did,
     load_or_create_identity,
 )
@@ -55,6 +51,42 @@ def test_private_key_permission(tmp_data_dir: Path) -> None:
     key_path = tmp_data_dir / "private_key.pem"
     mode = key_path.stat().st_mode
     assert stat.S_IMODE(mode) == 0o600
+
+
+def test_identity_uses_expanded_explicit_data_dir(tmp_path: Path) -> None:
+    """显式数据目录可使用 ~，且身份文件写入展开后的目录。"""
+    home = tmp_path / "home"
+    data_dir = "~/hermes-data/anp-agent"
+    old_home = os.environ.get("HOME")
+    os.environ["HOME"] = str(home)
+    try:
+        identity = load_or_create_identity(data_dir, "localhost")
+    finally:
+        if old_home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = old_home
+
+    expected_dir = home / "hermes-data" / "anp-agent"
+    assert identity.data_dir == expected_dir
+    assert (expected_dir / "did.json").exists()
+    key_path = expected_dir / "private_key.pem"
+    assert key_path.exists()
+    assert stat.S_IMODE(key_path.stat().st_mode) == 0o600
+
+
+def test_identity_regenerates_in_same_explicit_data_dir(tmp_data_dir: Path) -> None:
+    """身份损坏后应在同一显式数据目录备份并重新生成。"""
+    first = load_or_create_identity(tmp_data_dir, "localhost")
+    did_path = tmp_data_dir / "did.json"
+    did_path.write_text("not-json", encoding="utf-8")
+
+    second = load_or_create_identity(tmp_data_dir, "localhost")
+
+    assert second.data_dir == tmp_data_dir
+    assert second.did != first.did
+    assert (tmp_data_dir / "private_key.pem").exists()
+    assert len(list(tmp_data_dir.glob("did.json.bak.*"))) == 1
 
 
 def test_corrupt_did_document_backup_and_regenerate(tmp_data_dir: Path) -> None:
@@ -101,6 +133,20 @@ def test_missing_private_key_regenerates(tmp_data_dir: Path) -> None:
 
     assert second.did != first.did
     assert key_path.exists()
+
+
+def test_corrupt_private_key_backup_and_regenerate(tmp_data_dir: Path) -> None:
+    """私钥内容损坏时应备份旧私钥并重新生成身份。"""
+    first = load_or_create_identity(tmp_data_dir, "localhost")
+    key_path = tmp_data_dir / "private_key.pem"
+    key_path.write_bytes(b"not-a-private-key")
+
+    second = load_or_create_identity(tmp_data_dir, "localhost")
+
+    assert second.did != first.did
+    assert key_path.exists()
+    assert second.private_key_pem.startswith(b"-----BEGIN PRIVATE KEY-----")
+    assert len(list(tmp_data_dir.glob("private_key.pem.bak.*"))) == 1
 
 
 def test_hostname_change_regenerates(tmp_data_dir: Path) -> None:

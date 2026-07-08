@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from tests.e2e.conftest import free_port
+from .conftest import free_port
 
 
 def test_free_port_returns_valid_port():

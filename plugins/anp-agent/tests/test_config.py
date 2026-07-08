@@ -1,14 +1,9 @@
 """ANP 插件配置加载模块的单元测试。"""
 
-import os
-import sys
 from pathlib import Path
 from types import SimpleNamespace
 
-# 插件目录名包含连字符，无法作为 Python 包导入，因此将插件根目录加入搜索路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from config import ANPConfig, load_config
+from anp_agent.config import ANPConfig, load_config
 
 
 def _platform_config(extra=None):
@@ -26,6 +21,7 @@ def _clear_env(monkeypatch):
         "ANP_DATA_DIR",
         "ANP_REQUEST_TIMEOUT",
         "ANP_FUTURE_TTL",
+        "ANP_TOOL_RPC_ENABLED",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -41,9 +37,54 @@ def test_default_values(monkeypatch):
     assert cfg.port == 8900
     assert cfg.hostname == "localhost"
     assert cfg.endpoint == "http://localhost:8900"
-    assert cfg.data_dir == str(Path.home() / ".hermes" / "plugins" / "anp-agent")
+    assert cfg.data_dir == str(Path.home() / ".hermes" / "data" / "anp-agent")
     assert cfg.request_timeout == 60
     assert cfg.future_ttl == 120
+    assert cfg.tool_rpc.enabled is False
+    assert cfg.tool_rpc.allowed_dids == ()
+    assert cfg.tool_rpc.allowed_tools == ()
+    assert cfg.tool_rpc.allowed_toolsets == ()
+    assert cfg.tool_rpc.denied_tools == ()
+    assert cfg.tool_rpc.timeout_seconds == 30
+    assert cfg.tool_rpc.max_result_bytes == 65536
+    assert cfg.tool_rpc.has_allowlist is False
+
+
+def test_tool_rpc_extra_loads_policy_fields(monkeypatch):
+    """tool_rpc 配置应从 extra 中加载显式策略字段。"""
+    _clear_env(monkeypatch)
+    extra = {
+        "tool_rpc": {
+            "enabled": True,
+            "allowed_dids": ["did:wba:localhost:agent:caller"],
+            "allowed_tools": ["safe_tool"],
+            "allowed_toolsets": ["readonly"],
+            "denied_tools": ["blocked_tool"],
+            "timeout_seconds": "12",
+            "max_result_bytes": "4096",
+        }
+    }
+
+    cfg = load_config(_platform_config(extra))
+
+    assert cfg.tool_rpc.enabled is True
+    assert cfg.tool_rpc.allowed_dids == ("did:wba:localhost:agent:caller",)
+    assert cfg.tool_rpc.allowed_tools == ("safe_tool",)
+    assert cfg.tool_rpc.allowed_toolsets == ("readonly",)
+    assert cfg.tool_rpc.denied_tools == ("blocked_tool",)
+    assert cfg.tool_rpc.timeout_seconds == 12
+    assert cfg.tool_rpc.max_result_bytes == 4096
+    assert cfg.tool_rpc.has_allowlist is True
+
+
+def test_tool_rpc_enabled_without_allowlist_has_no_allowlist(monkeypatch):
+    """仅开启 tool_rpc 但未配置工具 allowlist 时不应形成可暴露能力。"""
+    _clear_env(monkeypatch)
+
+    cfg = load_config(_platform_config({"tool_rpc": {"enabled": True}}))
+
+    assert cfg.tool_rpc.enabled is True
+    assert cfg.tool_rpc.has_allowlist is False
 
 
 def test_env_variables_override_all_fields(monkeypatch):
@@ -96,12 +137,18 @@ def test_env_takes_precedence_over_extra(monkeypatch):
     _clear_env(monkeypatch)
     monkeypatch.setenv("ANP_PORT", "3333")
     monkeypatch.setenv("ANP_HOSTNAME", "env.example.com")
-    extra = {"port": "4444", "hostname": "extra.example.com"}
+    monkeypatch.setenv("ANP_DATA_DIR", "/tmp/env-anp-data")
+    extra = {
+        "port": "4444",
+        "hostname": "extra.example.com",
+        "data_dir": "/tmp/extra-anp-data",
+    }
 
     cfg = load_config(_platform_config(extra))
 
     assert cfg.port == 3333
     assert cfg.hostname == "env.example.com"
+    assert cfg.data_dir == "/tmp/env-anp-data"
 
 
 def test_invalid_integer_falls_back_to_default(monkeypatch):
