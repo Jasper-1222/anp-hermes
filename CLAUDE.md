@@ -163,14 +163,19 @@ openspec status --change <change-id>
 
 ```
 .
-├── CLAUDE.md          # 本文件
-├── openspec/          # OpenSpec 辅助规划工具目录（非项目建设内容）
+├── CLAUDE.md                 # 本文件
+├── README.md                 # 项目总览与快速开始
+├── docs/                     # 当前实现分析、OpenSpec 路线图与执行状态
+├── openspec/                 # OpenSpec 辅助规划工具目录（非项目建设内容）
 │   ├── config.yaml
-│   ├── specs/         # 当前 capability spec
-│   └── changes/       # 活跃变更与 archive/ 已归档变更
-└── .claude/           # Claude Code 自定义命令与技能
-    ├── commands/
-    └── skills/
+│   ├── specs/                # 当前 capability spec
+│   └── changes/              # 活跃变更与 archive/ 已归档变更
+└── plugins/anp-agent/        # Hermes ANP 平台插件
+    ├── __init__.py           # Hermes 插件入口
+    ├── plugin.yaml           # Hermes 插件元数据
+    ├── pyproject.toml        # Python 包与测试配置
+    ├── anp_agent/            # 插件运行时 Python 包
+    └── tests/                # 单元、集成与 E2E 测试
 ```
 
 ## 本地开发环境

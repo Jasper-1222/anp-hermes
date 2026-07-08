@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-前九个 OpenSpec 变更已完成并归档，当前正在执行第十个变更：
+前十个 OpenSpec 变更已完成并归档：
 
 ```text
 reconcile-anp-spec-docs
@@ -22,10 +22,10 @@ expose-hermes-tools
 当前 active change：
 
 ```text
-expose-hermes-tools
+review-community-readiness
 ```
 
-状态：`expose-hermes-tools` 已完成 proposal/design/specs/tasks 创建与 OpenSpec validate，当前处于 apply 阶段；已完成 tool RPC 配置、策略、helper、OpenRPC/discovery/capabilities 与 `/agent/rpc` route 的 TDD 实现，待最终全量验证、sync 与 archive。
+状态：前十个路线图变更已完成并归档。当前正在执行 `review-community-readiness` 收尾审计变更，用于更新分析报告、路线图和文档一致性，并运行社区就绪验证矩阵。`expose-hermes-tools` 已完成实现、验证、main specs 同步与归档，归档目录为 `openspec/changes/archive/2026-07-08-expose-hermes-tools/`。
 
 ## 用户约定
 
@@ -36,10 +36,10 @@ expose-hermes-tools
 ## 当前 active change
 
 ```text
-expose-hermes-tools
+review-community-readiness
 ```
 
-状态：`expose-hermes-tools` apply 进行中。已完成默认关闭的 tool RPC 配置结构、allowlist/denylist/caller DID 策略、`hermes.tool.<tool_name>` 映射、OpenRPC/capabilities/discovery 声明、受控工具调用 dispatcher 与 `/agent/rpc` 路由；工具调用失败响应不会附带成功认证 `Authentication-Info`。
+状态：`review-community-readiness` apply 进行中。目标是把文档从“执行中路线图”收口为“社区参考实现候选”状态，复核 README、插件 README、CLAUDE.md、main specs 与执行状态文档，并记录社区就绪验证矩阵。
 
 ## 已完成
 
@@ -74,8 +74,8 @@ expose-hermes-tools
 - [x] 应用并验证 `productionize-did-resolver` DID resolver 生产边界变更
 - [x] 同步并归档 `productionize-did-resolver`
 - [x] 创建 `expose-hermes-tools` proposal/design/tasks/spec deltas
-- [ ] 应用并验证 `expose-hermes-tools` Hermes tools 安全暴露变更
-- [ ] 同步并归档 `expose-hermes-tools`
+- [x] 应用并验证 `expose-hermes-tools` Hermes tools 安全暴露变更
+- [x] 同步并归档 `expose-hermes-tools`
 
 ## `reconcile-anp-spec-docs` 完成内容
 
@@ -179,6 +179,30 @@ expose-hermes-tools
 - [x] 更新根 README、插件 README、CLAUDE.md 与本执行状态文件，明确生产 DID WBA HTTPS 解析与本地 resolver override 边界。
 - [x] 运行最终 OpenSpec、ruff/black、普通测试、coverage 与 Echo E2E 验证。
 - [x] 归档到 `openspec/changes/archive/2026-07-08-productionize-did-resolver/`。
+
+## `expose-hermes-tools` 完成内容
+
+- [x] 创建 proposal/design/tasks/spec deltas。
+- [x] 新增并同步 `anp-hermes-tool-exposure` main spec。
+- [x] 新增默认关闭的 `tool_rpc` 配置结构，支持 `enabled`、`allowed_dids`、`allowed_tools`、`allowed_toolsets`、`denied_tools`、`timeout_seconds` 与 `max_result_bytes`。
+- [x] 实现 allowlist、denylist、caller DID 授权、schema 参数校验、工具执行、超时/取消/结果过大错误映射与审计记录。
+- [x] 将允许暴露的 Hermes registry tool 映射为 `hermes.tool.<tool_name>` JSON-RPC method。
+- [x] 更新 `/agent/interface.json`、`/agent/ad.json` 与 `anp.get_capabilities`，仅在 tool RPC 启用且存在 allowlisted 工具时声明 Hermes tools 能力。
+- [x] 更新 `/agent/rpc` 方法路由，保持 `chat`、`anp.get_capabilities` 与未知方法行为不变。
+- [x] 更新根 README、插件 README、CLAUDE.md 与 OpenSpec 执行状态文档，说明 tool RPC 默认关闭、安全边界与高风险工具不建议暴露。
+- [x] 运行并通过 OpenSpec、目标测试、普通测试、coverage、ruff/black 与 Echo E2E 验证。
+- [x] 同步 main specs 并归档到 `openspec/changes/archive/2026-07-08-expose-hermes-tools/`。
+
+## 当前收尾审计目标
+
+当前路线图前十个变更均已完成。`review-community-readiness` 负责做最后一轮事实收口：
+
+1. 更新 `docs/anp-hermes-current-implementation-analysis.md` 和 `docs/anp-hermes-openspec-roadmap.md`，移除已经完成的 Top 10 待办口吻，把现状改为“社区参考实现候选”。
+2. 复核 README、插件 README、CLAUDE.md 与 main specs，确认 tool RPC 默认关闭、DID resolver 生产边界、包化安装、E2E 测试说明没有互相矛盾。
+3. 运行社区就绪验证矩阵：OpenSpec 全量校验、普通测试、coverage、ruff/black、Echo E2E；真实 LLM E2E 作为有凭据时的条件验证。
+4. 产出下一阶段 backlog：生产部署指南、ANP SDK 上游 resolver injection、Bearer token 后续请求完整验收、限流/审计持久化、社区示例客户端。
+
+完成 apply 后，下一步应运行 `/opsx:sync review-community-readiness`，再运行 `/opsx:archive review-community-readiness`。
 
 ## 验证记录
 
@@ -911,4 +935,5 @@ openspec/changes/archive/2026-07-08-productionize-did-resolver/
 - `harden-test-harness` 已实现并归档；coverage、hermetic Echo E2E、LLM E2E 早 skip 与协议关键路径回归测试已完成。
 - `package-anp-plugin` 已实现并归档；运行时代码已迁移到 `anp_agent/` 包，根 entrypoint 不再污染 `sys.path`，release zip 已包含包化结构。
 - `productionize-did-resolver` 已实现并归档；resolver override 已限制为 loopback 本地测试用途，HTTPS override 保持 TLS 校验，timeout 与多实例冲突边界已加固。
-- 当前建议进入后续变更：`expose-hermes-tools`。
+- `expose-hermes-tools` 已实现并归档；Hermes tools 仅在 tool RPC 显式启用、allowlisted 且 caller DID 授权后暴露。
+- 当前正在执行收尾审计变更：`review-community-readiness`。完成后应同步 `anp-community-readiness` main spec 并归档。
