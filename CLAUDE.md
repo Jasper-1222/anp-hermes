@@ -44,12 +44,13 @@ python3 -m pytest tests/e2e/test_echo.py -v --run-e2e
 python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
 
 # 阶段二：临时覆盖 provider（不修改 ~/.hermes/config.yaml）
-export ANP_E2E_LLM_PROVIDER="kimi"
-export ANP_E2E_LLM_API="https://api.kimi.com/coding/v1"
-export ANP_E2E_LLM_KEY_ENV="KIMI_API_KEY"
-export KIMI_API_KEY="sk-..."
+ANP_E2E_LLM_PROVIDER="kimi" \
+ANP_E2E_LLM_API="https://api.kimi.com/coding/v1" \
+ANP_E2E_LLM_KEY_ENV="KIMI_API_KEY" \
 python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
 ```
+
+真实 LLM E2E 已用 Kimi code endpoint 验证过。不要把 API key 写入仓库、CLAUDE.md 或 README；临时 key 建议通过安全环境变量或 `/tmp` 600 权限文件注入，跑完立即删除并轮换。
 
 ### Lint 与格式化
 
@@ -135,6 +136,15 @@ openspec status --change <change-id>
 # /opsx:apply <change-id>
 ```
 
+当前 OpenSpec 状态：
+- 前 11 个变更已完成、同步并归档：从 `reconcile-anp-spec-docs` 到 `review-community-readiness`。
+- 当前 active changes 应为空；若继续新工作，应先创建新的 OpenSpec change。
+- main specs 已包含 `anp-community-readiness`，用于记录社区就绪收尾契约。
+- 上下文恢复优先读取：
+  1. `docs/anp-hermes-openspec-execution-state.md`
+  2. `docs/anp-hermes-openspec-roadmap.md`
+  3. `docs/anp-hermes-current-implementation-analysis.md`
+
 ### 接入 ANP 测试床
 
 插件安装并重启 Gateway 后，继续在同一对话框中要求 LLM 完成以下测试床配置：
@@ -175,6 +185,7 @@ openspec status --change <change-id>
     ├── plugin.yaml           # Hermes 插件元数据
     ├── pyproject.toml        # Python 包与测试配置
     ├── anp_agent/            # 插件运行时 Python 包
+    │   └── tools.py          # 可选 Hermes tool RPC 策略、授权、参数校验与执行
     └── tests/                # 单元、集成与 E2E 测试
 ```
 
@@ -214,6 +225,7 @@ openspec status --change <change-id>
 
 - 本项目以应用代码为首要建设目标，`openspec/` 仅用于变更规划，不要在其中存放业务实现。
 - Hermes tools RPC 是默认关闭的可选能力；只有在 `gateway.platforms.anp.extra.tool_rpc` 中显式配置 allowlist、denylist 与 caller DID 授权后，才可通过 `hermes.tool.<tool_name>` 暴露低风险工具。不要默认暴露 shell、代码执行、文件写入、skill 管理、浏览器自动化、外部发布等高风险工具。
+- 真实 LLM E2E 使用临时 provider/API key 时，不要把 key 写入仓库文件或长期 shell 配置；优先使用一次性环境变量或 `/tmp` 600 权限临时文件，测试结束后删除并轮换。
 - 在引入技术栈前，先在本文件中更新对应的构建、测试与架构说明。
 - 保持目录整洁：不要在根目录随意创建与项目目标无关的文件。
 - 所有代码变更需服务于项目目标，并为 ANP 社区贡献做准备，保持高质量、高可测试性。
