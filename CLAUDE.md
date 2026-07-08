@@ -1,182 +1,95 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working in this repository. Keep it project-specific; global coding behavior lives in `~/.claude/CLAUDE.md`.
 
 ## 项目目标
 
-本项目最终目标是**为 ANP（Agent Network Protocol）社区贡献一个高质量的 Hermes 接入参考实现**。具体而言，通过 Hermes 的平台插件机制，让 Hermes 智能体能够作为 ANP 网络上的**服务智能体**被其他智能体发现和调用。
+本项目目标是为 ANP（Agent Network Protocol）社区贡献一个高质量 Hermes 接入参考实现：通过 Hermes 插件机制，让 Hermes 智能体作为 ANP 网络上的服务智能体被发现和调用。
 
-关键约束：
+硬约束：
 - 使用 ANP 原生 DID WBA 身份（`did:wba:`），不使用 `did:cn` 或其他 DID 方法。
-- 不依赖 DTR、Portal、Mediator、OpenClaw 等外部基础设施，仅使用 ANP Python SDK 和 Hermes 插件机制。
+- 不依赖 DTR、Portal、Mediator、OpenClaw 等外部基础设施；仅使用 ANP Python SDK 与 Hermes 插件机制。
 - 插件必须零侵入 Hermes 核心代码，便于社区贡献和独立发布。
 - 第一期仅实现身份认证 + JSON-RPC 调用；AP2 支付和 E2EE 加密延后。
+- Hermes tool RPC 是默认关闭的可选能力，只能在显式 allowlist/denylist 与 caller DID 授权后暴露低风险工具。
 
 ## 官方语言
 
-本项目的官方语言为**中文**。所有文档、代码注释、业务语义命名、提交信息、Issue/PR 描述等均应使用中文。
+本项目官方语言为中文。文档、代码注释、业务语义命名、提交信息、Issue/PR 描述等均应使用中文。
 
-## 开发命令
-
-### 安装与测试
+## 常用命令
 
 ```bash
-# 进入插件目录
+# 插件开发目录
 cd plugins/anp-agent
 
 # 安装插件及测试/开发依赖
 python3 -m pip install -e ".[test,dev]"
 
-# 运行全部测试
-python3 -m pytest tests/ -v
-
-# 运行单个测试文件
+# 单元与集成测试
+python3 -m pytest tests/ -q
 python3 -m pytest tests/test_server.py -v
 
-# 运行测试并检查覆盖率（覆盖率要求 ≥ 85%）
+# 覆盖率门槛：≥ 85%
 python3 -m pytest --cov=anp_agent --cov-fail-under=85 -q
 
-# 阶段一：确定性 Echo E2E（本地 mock LLM，无需真实 API key，不依赖真实 ~/.hermes/config.yaml）
+# 格式与 lint
+ruff check .
+black --check .
+
+# E2E：本地 mock LLM，无真实 API key
 python3 -m pytest tests/e2e/test_echo.py -v --run-e2e
 
-# 阶段二：真实 LLM E2E（使用 ~/.hermes/config.yaml 中配置的 provider）
-# 需要配置对应 provider 的 API key 环境变量，例如 DEEPSEEK_API_KEY
+# E2E：真实 LLM，使用 ~/.hermes/config.yaml 中的 provider
 python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
 
-# 阶段二：临时覆盖 provider（不修改 ~/.hermes/config.yaml）
+# E2E：临时覆盖 provider，不修改 ~/.hermes/config.yaml
 ANP_E2E_LLM_PROVIDER="kimi" \
 ANP_E2E_LLM_API="https://api.kimi.com/coding/v1" \
 ANP_E2E_LLM_KEY_ENV="KIMI_API_KEY" \
 python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
 ```
 
-真实 LLM E2E 已用 Kimi code endpoint 验证过。不要把 API key 写入仓库、CLAUDE.md 或 README；临时 key 建议通过安全环境变量或 `/tmp` 600 权限文件注入，跑完立即删除并轮换。
+真实 LLM E2E 已用 Kimi code endpoint 验证过。不要把 API key 写入仓库、CLAUDE.md 或 README；临时 key 优先通过安全环境变量或 `/tmp` 600 权限文件注入，跑完删除并轮换。
 
-### Lint 与格式化
+## OpenSpec 当前状态
 
-```bash
-# 检查 ruff lint
-ruff check .
-
-# 自动修复可修复的 lint 问题
-ruff check --fix .
-
-# 检查 black 格式化
-black --check .
-
-# 应用 black 格式化
-black .
-```
-
-### 对话框安装（推荐）
-
-在 Hermes 对话框中复制并发送以下内容，LLM 会自动完成下载、安装、启用与重启 Gateway：
-
-```text
-安装插件 https://github.com/Jasper-1222/anp-hermes/releases/latest/download/anp-agent.zip
-```
-
-LLM 将按以下步骤执行：
-
-1. 下载 `anp-agent.zip`。
-2. 检查 zip 内包含 `plugin.yaml`、`__init__.py` 与 `anp_agent/`。
-3. 解压到 `~/.hermes/plugins/anp-agent/`；若 zip 内部包含顶层目录，需将其内容直接移入 `~/.hermes/plugins/anp-agent/`，确保 `plugin.yaml`、`__init__.py` 与 `anp_agent/` 位于该目录根下。
-4. 在 `~/.hermes/config.yaml` 中启用 `anp-agent` 插件，并添加 `gateway.platforms.anp` 配置。
-5. 重启 Hermes gateway。
-6. 报告成功或遇到的错误。
-
-### 手动安装
-
-```bash
-# 将插件复制/链接到 Hermes 插件目录
-ln -s $(pwd)/plugins/anp-agent ~/.hermes/plugins/anp-agent
-
-# 在 ~/.hermes/config.yaml 中启用 anp 平台
-cat >> ~/.hermes/config.yaml <<EOF
-gateway:
-  platforms:
-    anp:
-      extra:
-        host: 0.0.0.0
-        port: 8900
-        hostname: localhost
-        endpoint: http://localhost:8900
-        # 可选：默认使用 ~/.hermes/data/anp-agent/，不要写入插件安装目录
-        # data_dir: ~/.hermes/data/anp-agent/
-        request_timeout: 60
-        future_ttl: 120
-        # 可选：默认关闭；仅显式 allowlist 后暴露低风险 Hermes tools
-        # tool_rpc:
-        #   enabled: false
-        #   allowed_dids: []
-        #   allowed_tools: []
-        #   allowed_toolsets: []
-        #   denied_tools: []
-        #   timeout_seconds: 30
-        #   max_result_bytes: 65536
-EOF
-
-# DID 文档与私钥 PEM 默认写入 ~/.hermes/data/anp-agent/
-# 如需复用旧身份，可显式配置 data_dir 或 ANP_DATA_DIR；不要将运行态身份文件提交到仓库。
-
-# 启动 Hermes gateway（测试环境需设置 ANP_ALLOW_ALL_USERS=1）
-ANP_ALLOW_ALL_USERS=1 hermes run
-```
-
-### OpenSpec 相关命令
-
-```bash
-# 查看活跃变更列表
-openspec list
-
-# 查看指定变更状态
-openspec status --change <change-id>
-
-# 开始实现指定变更
-# /opsx:apply <change-id>
-```
-
-当前 OpenSpec 状态：
 - 前 11 个变更已完成、同步并归档：从 `reconcile-anp-spec-docs` 到 `review-community-readiness`。
-- 当前 active changes 应为空；若继续新工作，应先创建新的 OpenSpec change。
+- 当前 active changes 应为空；新工作应先创建新的 OpenSpec change。
 - main specs 已包含 `anp-community-readiness`，用于记录社区就绪收尾契约。
-- 上下文恢复优先读取：
-  1. `docs/anp-hermes-openspec-execution-state.md`
-  2. `docs/anp-hermes-openspec-roadmap.md`
-  3. `docs/anp-hermes-current-implementation-analysis.md`
+- 常用命令：
 
-### 接入 ANP 测试床
+```bash
+openspec list
+openspec status --change <change-id>
+openspec validate --all
+# /opsx:apply <change-id>
+# /opsx:sync <change-id>
+# /opsx:archive <change-id>
+```
 
-插件安装并重启 Gateway 后，继续在同一对话框中要求 LLM 完成以下测试床配置：
+上下文恢复优先读取：
+1. `docs/anp-hermes-openspec-execution-state.md`
+2. `docs/anp-hermes-openspec-roadmap.md`
+3. `docs/anp-hermes-current-implementation-analysis.md`
 
-1. 设置环境变量（仅用于测试环境）：
+## 本地开发环境
 
-   ```bash
-   export ANP_ALLOW_ALL_USERS=1
-   ```
-
-   若 Gateway 已在运行，设置后需重启以生效。
-
-2. 启动本地 loopback DID 文档解析服务。插件默认生成 DID WBA path DID，例如 `did:wba:{ANP_HOSTNAME}:agent:e1_<fingerprint>`，并在 `http://{ANP_HOSTNAME}:{ANP_PORT}/agent/e1_<fingerprint>/did.json` 公开 DID 文档；本地测试床可配置：
-
-   ```bash
-   export ANP_DID_RESOLVER_BASE_URL=http://localhost:8900
-   ```
-
-   该变量仅用于本地开发、测试床与 E2E，只接受 loopback base URL（如 `localhost`、`127.0.0.1`、`::1`）。生产部署不要依赖该 override；应让服务 DID 可通过 DID WBA 默认 HTTPS 规则解析，例如 `did:wba:example.com:agent:e1_<fingerprint>` 对应 `https://example.com/agent/e1_<fingerprint>/did.json`。
-
-3. 确保 `~/.hermes/config.yaml` 中已配置 LLM provider（真实 LLM 测试需要）。
-
-完成以上步骤后，Hermes 即可作为 ANP 服务智能体被其他智能体发现和调用。
+- Hermes 源码：`/home/peter/hermes-agent`
+  - 参考 `BasePlatformAdapter`、`MessageEvent`、`platform_registry`、`ctx.register_platform()`。
+  - 插件代码必须只通过公开/稳定插件接口与 Hermes 交互。
+- Hermes 程序：本地已安装并保持最新，可用于 E2E 验证。
+- ANP 协议仓库：`/home/peter/agent-network-protocol`
+  - 查询 ANP 协议细节时优先使用本地仓库，无需再拉 GitHub。
 
 ## 仓库结构
 
-```
+```text
 .
 ├── CLAUDE.md                 # 本文件
 ├── README.md                 # 项目总览与快速开始
 ├── docs/                     # 当前实现分析、OpenSpec 路线图与执行状态
-├── openspec/                 # OpenSpec 辅助规划工具目录（非项目建设内容）
+├── openspec/                 # OpenSpec 辅助规划工具目录（非业务实现）
 │   ├── config.yaml
 │   ├── specs/                # 当前 capability spec
 │   └── changes/              # 活跃变更与 archive/ 已归档变更
@@ -185,112 +98,38 @@ openspec status --change <change-id>
     ├── plugin.yaml           # Hermes 插件元数据
     ├── pyproject.toml        # Python 包与测试配置
     ├── anp_agent/            # 插件运行时 Python 包
+    │   ├── adapter.py        # Hermes 平台适配器
+    │   ├── auth.py           # DID WBA 认证
+    │   ├── bridge.py         # ANP JSON-RPC ↔ Hermes 桥接
+    │   ├── config.py         # 配置加载
+    │   ├── identity.py       # DID WBA 身份管理
+    │   ├── server.py         # aiohttp HTTP 端点
     │   └── tools.py          # 可选 Hermes tool RPC 策略、授权、参数校验与执行
     └── tests/                # 单元、集成与 E2E 测试
 ```
 
-## 本地开发环境
+## 架构速览
 
-- **Hermes 源码**：`/home/peter/hermes-agent`
-  - 实现插件时需要参考 `BasePlatformAdapter`、`MessageEvent`、`platform_registry`、`ctx.register_platform()` 等契约。
-  - 插件代码必须零侵入 Hermes 核心，仅通过公开/稳定的插件接口与 Hermes 交互。
-- **Hermes 程序**：本地已安装，并保持为最新版本。
-  - 可用于 E2E 验证：启动 gateway 并加载 `anp-agent` 插件。
-- **ANP 协议仓库**：`/home/peter/agent-network-protocol`
-  - 本地已下载 ANP 官方协议规范、SDK 源码与示例。查询 ANP 协议细节时应优先使用本地仓库，无需再去 GitHub 拉取。
-
-## 架构概览
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    ANP Demo Client                           │
-│         （anp.openanp.RemoteAgent.discover）                  │
-└───────────────────────────┬─────────────────────────────────┘
-                            │ HTTP + DID WBA 认证
-┌───────────────────────────▼─────────────────────────────────┐
-│                 Hermes ANP Platform Plugin                   │
-│    ┌─────────────┐  ┌─────────────────┐  ┌───────────────┐  │
-│    │ /agent/ad.json │  │ /agent/interface.json │  │ POST /agent/rpc │  │
-│    └─────────────┘  └─────────────────┘  └───────────────┘  │
-│                          │                                   │
-│                          ▼ Bridge (asyncio.Future)           │
-│                   BasePlatformAdapter.handle_message         │
-│                          │                                   │
-│                          ▼                                   │
-│                   Hermes Agent Core (LLM / skills / tools)   │
-└─────────────────────────────────────────────────────────────┘
+```text
+ANP Client / RemoteAgent.discover
+        │ HTTP + DID WBA 认证
+        ▼
+Hermes ANP Platform Plugin
+  ├─ GET /agent/ad.json
+  ├─ GET /.well-known/agent-descriptions
+  ├─ GET /agent/interface.json
+  └─ POST /agent/rpc
+        │ JSON-RPC bridge / asyncio.Future
+        ▼
+Hermes Agent Core（LLM / skills / tools）
 ```
 
-## 工作约定
+## 项目特有 gotchas
 
-- 本项目以应用代码为首要建设目标，`openspec/` 仅用于变更规划，不要在其中存放业务实现。
-- Hermes tools RPC 是默认关闭的可选能力；只有在 `gateway.platforms.anp.extra.tool_rpc` 中显式配置 allowlist、denylist 与 caller DID 授权后，才可通过 `hermes.tool.<tool_name>` 暴露低风险工具。不要默认暴露 shell、代码执行、文件写入、skill 管理、浏览器自动化、外部发布等高风险工具。
-- 真实 LLM E2E 使用临时 provider/API key 时，不要把 key 写入仓库文件或长期 shell 配置；优先使用一次性环境变量或 `/tmp` 600 权限临时文件，测试结束后删除并轮换。
-- 在引入技术栈前，先在本文件中更新对应的构建、测试与架构说明。
-- 保持目录整洁：不要在根目录随意创建与项目目标无关的文件。
-- 所有代码变更需服务于项目目标，并为 ANP 社区贡献做准备，保持高质量、高可测试性。
-
-## 基本行为准则
-
-> 来源：[multica-ai/andrej-karpathy-skills](https://github.com/multica-ai/andrej-karpathy-skills/blob/main/CLAUDE.md)
-
-**权衡**：这些准则偏向谨慎而非速度。对于琐碎任务，请自行判断。
-
-### 1. 编码前先思考
-
-**不要假设。不要隐藏困惑。摆出权衡。**
-
-实现前：
-- 明确陈述你的假设。若不确定，请提问。
-- 若存在多种理解，请全部列出——不要默默选择。
-- 若存在更简单的方案，请说出来。必要时提出反对。
-- 若某处不清楚，停下来，指出困惑点，提问。
-
-### 2. 极简优先
-
-**用最少代码解决问题。不要臆测。**
-- 不实现超出需求的特性。
-- 不为一次性代码做抽象。
-- 不添加未被要求的“灵活性”或“可配置性”。
-- 不处理不可能发生的场景的错误。
-- 若 200 行能写成 50 行，就重写。
-
-问自己：“资深工程师会觉得这过度设计吗？”若是，简化。
-
-### 3. 精准改动
-
-**只动必须动的。只清理自己制造的。**
-
-编辑现有代码时：
-- 不要“顺手改进”相邻代码、注释或格式。
-- 不要重构没坏的东西。
-- 匹配现有风格，即使你自己不会这么写。
-- 若发现无关死代码，请指出——不要删除。
-
-当你的改动产生孤儿代码时：
-- 删除因你的改动而变得未使用的 import / 变量 / 函数。
-- 不要删除既有的死代码，除非用户要求。
-
-检验标准：**每一行改动都应能追溯到用户的请求。**
-
-### 4. 目标驱动执行
-
-**定义成功标准。循环直到验证通过。**
-
-将任务转化为可验证的目标：
-- “添加校验” → “为无效输入写测试，然后让它们通过”
-- “修复 bug” → “写一个能复现 bug 的测试，然后让它通过”
-- “重构 X” → “确保重构前后测试都通过”
-
-多步骤任务先给出简要计划：
-```
-1. [步骤] → 验证：[检查]
-2. [步骤] → 验证：[检查]
-3. [步骤] → 验证：[检查]
-```
-
-明确的成功标准让你能独立迭代；模糊的标准（“让它跑起来”）需要反复澄清。
-
----
-
-**这些准则生效的标志是**：diff 中不必要的改动更少、因过度设计导致的重写更少，并且在出错之前先提出问题而不是在出错之后。
+- `openspec/` 只存变更规划和 capability specs，不存业务实现。
+- DID 文档与私钥 PEM 默认写入 `~/.hermes/data/anp-agent/`；不要写入插件安装目录或提交到仓库。
+- `ANP_DID_RESOLVER_BASE_URL` 仅用于本地开发、测试床与 E2E，只接受 loopback base URL。生产部署应让 DID WBA 默认 HTTPS 规则解析到公开 `https://{domain}/agent/e1_<fingerprint>/did.json`。
+- 测试环境可用 `ANP_ALLOW_ALL_USERS=1`；公开部署不要依赖该开关。
+- tool RPC 默认关闭。不要默认暴露 shell、代码执行、文件写入、skill 管理、浏览器自动化、外部发布等高风险工具。
+- 通过 Hermes 对话框安装插件时，release zip 根目录必须直接包含 `plugin.yaml`、`__init__.py` 与 `anp_agent/`。
+- 引入新技术栈前，先更新本文件中的命令、架构或 gotchas。
