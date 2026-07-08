@@ -7,12 +7,16 @@
 ## Requirements
 
 ### Requirement: LLM E2E test runs single-turn chat through Hermes
-The system SHALL provide an E2E test that starts a real Hermes gateway with a configured LLM provider and verifies a single-turn `chat` call returns a non-empty, valid response.
+The system SHALL provide an E2E test that starts a real Hermes gateway with a configured LLM provider and verifies a single-turn `chat` call returns a non-empty, valid response. The gateway SHALL only be started after the slow E2E flag and required provider credentials have been validated.
 
 #### Scenario: Single-turn chat returns valid response
-- **WHEN** the LLM E2E test fixture starts `hermes gateway run` with a temporary `HERMES_HOME` configured for a real LLM provider (copied from the user's real `~/.hermes/config.yaml`) and `anp-agent` enabled
+- **WHEN** the LLM E2E test fixture starts `hermes gateway run` with a temporary `HERMES_HOME` configured for a real LLM provider and `anp-agent` enabled
 - **AND** a valid ANP caller signs and sends `POST /agent/rpc` with method `chat` and params `{"message": "你好"}`
 - **THEN** the server returns HTTP 200 with a JSON-RPC result containing a non-empty `response` string and no `error` field
+
+#### Scenario: Gateway is not started before slow prerequisites pass
+- **WHEN** `pytest` runs LLM E2E tests without `--run-slow-e2e` or without the required provider API key
+- **THEN** the tests are skipped before starting the Hermes gateway process
 
 ### Requirement: LLM E2E test verifies multi-turn context retention
 The system SHALL verify that Hermes retains conversation context across multiple sequential `chat` calls from the same caller DID.
@@ -32,6 +36,10 @@ The system SHALL classify LLM-based E2E tests as slow and require an additional 
 #### Scenario: Full E2E run includes LLM tests
 - **WHEN** `pytest` runs with both `--run-e2e` and `--run-slow-e2e` and the required LLM provider credentials are available
 - **THEN** LLM E2E tests are executed
+
+#### Scenario: Missing provider credentials skip before startup
+- **WHEN** `pytest` runs with both E2E flags but the selected provider API key environment variable is absent
+- **THEN** LLM E2E tests are skipped before starting Hermes gateway, with a skip reason naming the missing credential requirement
 
 ### Requirement: LLM E2E tests use loose assertions
 The system SHALL use non-deterministic assertions for LLM responses to avoid flaky failures caused by model output variation.

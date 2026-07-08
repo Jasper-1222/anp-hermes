@@ -2,8 +2,8 @@
 requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-py-modules = []
+[tool.setuptools.packages.find]
+include = ["anp_agent*"]
 
 [project]
 name = "hermes-platform-anp-agent"
@@ -55,8 +55,17 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["."]
-omit = ["tests/e2e/*", "tests/helpers/*"]
+source = ["anp_agent"]
+omit = [
+    "tests/*",
+    "tests/e2e/*",
+    "tests/helpers/*",
+    "**/__pycache__/*",
+    "did.json",
+    "*.pem",
+    "*.tmp",
+    "*.bak.*",
+]
 branch = true
 
 [tool.coverage.report]
@@ -84,4 +93,4 @@ ignore = ["E501", "N999"]
 "tests/*.py" = ["E402"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["adapter", "auth", "bridge", "config", "constants", "identity", "server"]
+known-first-party = ["anp_agent"]

@@ -3,24 +3,25 @@
 import asyncio
 import json
 import os
-import sys
 from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
-
-# 插件目录名包含连字符，无法作为 Python 包导入，因此将插件根目录加入搜索路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from anp.authentication import create_did_wba_document
+from anp.authentication import did_resolver as did_resolver_module
 from anp.authentication import did_wba_verifier as did_wba_verifier_module
 from anp.authentication.did_resolver import resolve_did_document
 from anp.authentication.did_wba import resolve_did_wba_document
 from anp.authentication.did_wba_verifier import DidWbaVerifierError
 
-from auth import AuthenticationError, _resolver_config, create_auth
-from identity import ANPIdentity, load_or_create_identity
+from anp_agent.auth import (
+    _DEFAULT_DID_RESOLVE_TIMEOUT,
+    AuthenticationError,
+    _resolver_config,
+    create_auth,
+)
+from anp_agent.identity import ANPIdentity, load_or_create_identity
 from tests.helpers.did_server import DIDDocumentServer
 from tests.helpers.signing import build_signed_headers
 
@@ -103,9 +104,72 @@ async def test_valid_signature_returns_caller_did(auth, caller_identity: dict) -
     body = json.dumps({"jsonrpc": "2.0", "method": "chat", "params": {}, "id": "1"})
     headers = await build_signed_headers(caller_identity, target_url, body)
 
-    caller_did = await auth.authenticate("POST", target_url, headers, body)
+    result = await auth.authenticate("POST", target_url, headers, body)
 
-    assert caller_did == caller_identity["did"]
+    assert result.caller_did == caller_identity["did"]
+    assert "Authentication-Info" in result.headers
+
+
+@pytest.mark.asyncio
+async def test_authenticate_filters_success_headers(identity: ANPIdentity) -> None:
+    """认证成功时只返回允许转发的 Authentication-Info 头。"""
+    auth = create_auth(identity)
+
+    original = auth._verifier.verify_request
+    auth._verifier.verify_request = AsyncMock(
+        return_value={
+            "did": "did:wba:localhost:agent:caller",
+            "response_headers": {
+                "authentication-info": 'access_token="token"',
+                "Authorization": "Bearer should-not-forward",
+                "X-Internal": "should-not-forward",
+            },
+        }
+    )
+
+    try:
+        result = await auth.authenticate(
+            "POST",
+            "http://localhost:8900/agent/rpc",
+            {
+                "Signature-Input": 'sig1=("@method");created=1;keyid="did:wba:localhost:agent:e1_x#key-1"',
+                "Signature": "sig1=:AAAA:",
+            },
+            "{}",
+        )
+    finally:
+        auth._verifier.verify_request = original
+
+    assert result.caller_did == "did:wba:localhost:agent:caller"
+    assert result.headers == {"Authentication-Info": 'access_token="token"'}
+
+
+@pytest.mark.asyncio
+async def test_authenticate_missing_success_headers_returns_empty_headers(
+    identity: ANPIdentity,
+) -> None:
+    """认证成功但 verifier 未返回响应头时，headers 为空。"""
+    auth = create_auth(identity)
+
+    original = auth._verifier.verify_request
+    auth._verifier.verify_request = AsyncMock(
+        return_value={"did": "did:wba:localhost:agent:caller"}
+    )
+
+    try:
+        result = await auth.authenticate(
+            "POST",
+            "http://localhost:8900/agent/rpc",
+            {
+                "Signature-Input": 'sig1=("@method");created=1;keyid="did:wba:localhost:agent:e1_x#key-1"',
+                "Signature": "sig1=:AAAA:",
+            },
+            "{}",
+        )
+    finally:
+        auth._verifier.verify_request = original
+
+    assert result.headers == {}
 
 
 @pytest.mark.asyncio
@@ -281,7 +345,7 @@ async def test_verify_request_non_string_did_returns_invalid_signature(
 
 def test_classify_verifier_error_status_code_500_fallback_to_internal_auth() -> None:
     """status_code 为 500 且消息无法分类时回退到 -32006。"""
-    from auth import _classify_verifier_error
+    from anp_agent.auth import _classify_verifier_error
 
     exc = DidWbaVerifierError("unexpected verifier failure", status_code=500)
     message, http_status, rpc_code = _classify_verifier_error(exc)
@@ -292,7 +356,7 @@ def test_classify_verifier_error_status_code_500_fallback_to_internal_auth() -> 
 
 def test_classify_verifier_error_status_code_500_with_known_message_still_matches() -> None:
     """status_code 为 500 但消息可分类时，仍按已知消息映射。"""
-    from auth import _classify_verifier_error
+    from anp_agent.auth import _classify_verifier_error
 
     exc = DidWbaVerifierError("Failed to resolve DID document: timeout", status_code=500)
     _, _, rpc_code = _classify_verifier_error(exc)
@@ -313,7 +377,7 @@ def test_classify_verifier_error_status_code_500_with_known_message_still_matche
 )
 def test_classify_verifier_error_maps_known_errors(message, status_code, expected_code) -> None:
     """已知 verifier 错误应映射到正确错误码。"""
-    from auth import _classify_verifier_error
+    from anp_agent.auth import _classify_verifier_error
 
     exc = DidWbaVerifierError(message, status_code=status_code)
     _, _, rpc_code = _classify_verifier_error(exc)
@@ -339,7 +403,7 @@ async def test_authentication_error_carries_structured_fields() -> None:
 async def test_bad_resolver_base_url_returns_unresolvable_error(
     identity: ANPIdentity,
 ) -> None:
-    """错误的 ANP_DID_RESOLVER_BASE_URL 应映射为 -32002。"""
+    """错误的 loopback ANP_DID_RESOLVER_BASE_URL 应映射为 -32002。"""
     os.environ["ANP_DID_RESOLVER_BASE_URL"] = "http://127.0.0.1:1"
     try:
         auth = create_auth(identity)
@@ -358,3 +422,197 @@ async def test_bad_resolver_base_url_returns_unresolvable_error(
         os.environ.pop("ANP_DID_RESOLVER_BASE_URL", None)
         _resolver_config["timeout"] = 10
         _resolver_config["base_url"] = None
+        _resolver_config.pop("verify_ssl", None)
+
+
+@pytest.mark.asyncio
+async def test_loopback_resolver_base_url_authenticates_without_manual_patch(
+    identity: ANPIdentity,
+    caller_identity: dict,
+    did_server: str,
+) -> None:
+    """loopback resolver override 应支持真实签名认证，无需手工 patch SDK resolver。"""
+    original_resolver = did_wba_verifier_module.resolve_did_wba_document
+    os.environ["ANP_DID_RESOLVER_BASE_URL"] = did_server
+    try:
+        auth = create_auth(identity)
+        target_url = "http://localhost:8900/agent/rpc"
+        body = json.dumps({"jsonrpc": "2.0", "method": "chat", "params": {}, "id": "1"})
+        headers = await build_signed_headers(caller_identity, target_url, body)
+
+        result = await auth.authenticate("POST", target_url, headers, body)
+
+        assert result.caller_did == caller_identity["did"]
+    finally:
+        os.environ.pop("ANP_DID_RESOLVER_BASE_URL", None)
+        did_wba_verifier_module.resolve_did_wba_document = original_resolver
+        _resolver_config["timeout"] = 10
+        _resolver_config["base_url"] = None
+        _resolver_config.pop("verify_ssl", None)
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        "http://example.com",
+        "https://example.com",
+    ],
+)
+def test_non_loopback_resolver_base_url_fails_fast(
+    identity: ANPIdentity,
+    base_url: str,
+) -> None:
+    """非 loopback resolver override 应在初始化时失败，避免误用于生产。"""
+    os.environ["ANP_DID_RESOLVER_BASE_URL"] = base_url
+    try:
+        with pytest.raises(ValueError, match="ANP_DID_RESOLVER_BASE_URL"):
+            create_auth(identity)
+    finally:
+        os.environ.pop("ANP_DID_RESOLVER_BASE_URL", None)
+        _resolver_config["timeout"] = 10
+        _resolver_config["base_url"] = None
+        _resolver_config.pop("verify_ssl", None)
+
+
+@pytest.mark.asyncio
+async def test_https_loopback_resolver_override_uses_ssl_verification(
+    identity: ANPIdentity,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HTTPS loopback override 调用通用 resolver 时应保持 verify_ssl=True。"""
+    captured = {}
+
+    async def _fake_resolve_did_document(*args, **kwargs):
+        captured.update(kwargs)
+        raise DidWbaVerifierError("Failed to resolve DID document: mocked", status_code=401)
+
+    monkeypatch.setattr(
+        did_resolver_module,
+        "resolve_did_document",
+        _fake_resolve_did_document,
+    )
+    os.environ["ANP_DID_RESOLVER_BASE_URL"] = "https://localhost:9443"
+    original_resolver = did_wba_verifier_module.resolve_did_wba_document
+    try:
+        auth = create_auth(identity)
+        with pytest.raises(AuthenticationError):
+            await auth.authenticate(
+                "POST",
+                "http://localhost:8900/agent/rpc",
+                {
+                    "Signature-Input": 'sig1=("@method");created=1;keyid="did:wba:localhost:agent:e1_x#key-1"',
+                    "Signature": "sig1=:AAAA:",
+                },
+                None,
+            )
+        assert captured["verify_ssl"] is True
+    finally:
+        os.environ.pop("ANP_DID_RESOLVER_BASE_URL", None)
+        did_wba_verifier_module.resolve_did_wba_document = original_resolver
+        _resolver_config["timeout"] = 10
+        _resolver_config["base_url"] = None
+        _resolver_config.pop("verify_ssl", None)
+
+
+@pytest.mark.parametrize("raw", ["not-a-number", "0", "-1"])
+def test_invalid_resolver_timeout_falls_back_to_default(
+    identity: ANPIdentity,
+    raw: str,
+) -> None:
+    """非法、零值或负数 timeout 应回退默认值。"""
+    os.environ["ANP_DID_RESOLVE_TIMEOUT"] = raw
+    try:
+        create_auth(identity)
+        assert _resolver_config["timeout"] == float(_DEFAULT_DID_RESOLVE_TIMEOUT)
+    finally:
+        os.environ.pop("ANP_DID_RESOLVE_TIMEOUT", None)
+        _resolver_config["timeout"] = 10
+        _resolver_config["base_url"] = None
+        _resolver_config.pop("verify_ssl", None)
+
+
+def test_excessive_resolver_timeout_is_capped(identity: ANPIdentity) -> None:
+    """超大 timeout 应被限制到安全上限。"""
+    os.environ["ANP_DID_RESOLVE_TIMEOUT"] = "999999"
+    try:
+        create_auth(identity)
+        assert _resolver_config["timeout"] == 60.0
+    finally:
+        os.environ.pop("ANP_DID_RESOLVE_TIMEOUT", None)
+        _resolver_config["timeout"] = 10
+        _resolver_config["base_url"] = None
+        _resolver_config.pop("verify_ssl", None)
+
+
+def test_same_resolver_override_configuration_is_idempotent(
+    identity: ANPIdentity,
+) -> None:
+    """相同 resolver override 配置应幂等，不重复嵌套 wrapper。"""
+    original_resolver = did_wba_verifier_module.resolve_did_wba_document
+    os.environ["ANP_DID_RESOLVER_BASE_URL"] = "http://127.0.0.1:8900"
+    try:
+        create_auth(identity)
+        first_wrapper = did_wba_verifier_module.resolve_did_wba_document
+        create_auth(identity)
+        second_wrapper = did_wba_verifier_module.resolve_did_wba_document
+
+        assert first_wrapper is second_wrapper
+        assert getattr(second_wrapper, "_anp_auth_wrapper", False) is True
+    finally:
+        os.environ.pop("ANP_DID_RESOLVER_BASE_URL", None)
+        did_wba_verifier_module.resolve_did_wba_document = original_resolver
+        _resolver_config["timeout"] = 10
+        _resolver_config["base_url"] = None
+        _resolver_config.pop("verify_ssl", None)
+
+
+def test_different_resolver_override_configuration_fails_fast(
+    identity: ANPIdentity,
+) -> None:
+    """不同非空 resolver override 配置不得静默覆盖进程级 wrapper。"""
+    original_resolver = did_wba_verifier_module.resolve_did_wba_document
+    os.environ["ANP_DID_RESOLVER_BASE_URL"] = "http://127.0.0.1:8900"
+    try:
+        create_auth(identity)
+        os.environ["ANP_DID_RESOLVER_BASE_URL"] = "http://127.0.0.1:8901"
+        with pytest.raises(RuntimeError, match="resolver"):
+            create_auth(identity)
+    finally:
+        os.environ.pop("ANP_DID_RESOLVER_BASE_URL", None)
+        did_wba_verifier_module.resolve_did_wba_document = original_resolver
+        _resolver_config["timeout"] = 10
+        _resolver_config["base_url"] = None
+        _resolver_config.pop("verify_ssl", None)
+
+
+@pytest.mark.asyncio
+async def test_invalid_did_document_from_resolver_returns_invalid_document_error(
+    identity: ANPIdentity,
+) -> None:
+    """resolver 返回无效 DID Document 时应映射为 -32004 且不外泄内部细节。"""
+    original_resolver = did_wba_verifier_module.resolve_did_wba_document
+
+    async def _invalid_resolver(did: str, verify_proof: bool = False):
+        raise ValueError("DID document binding verification failed for http://127.0.0.1:9999")
+
+    did_wba_verifier_module.resolve_did_wba_document = _invalid_resolver
+    try:
+        auth = create_auth(identity)
+        with pytest.raises(AuthenticationError) as exc_info:
+            await auth.authenticate(
+                "POST",
+                "http://localhost:8900/agent/rpc",
+                {
+                    "Signature-Input": 'sig1=("@method");created=1;keyid="did:wba:localhost:agent:e1_x#key-1"',
+                    "Signature": "sig1=:AAAA:",
+                },
+                None,
+            )
+        assert exc_info.value.rpc_code == -32004
+        assert str(exc_info.value) == "DID 文档无效"
+        assert "127.0.0.1" not in str(exc_info.value)
+    finally:
+        did_wba_verifier_module.resolve_did_wba_document = original_resolver
+        _resolver_config["timeout"] = 10
+        _resolver_config["base_url"] = None
+        _resolver_config.pop("verify_ssl", None)

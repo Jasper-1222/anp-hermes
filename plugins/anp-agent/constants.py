@@ -1,8 +1,0 @@
-"""ANP 插件默认配置常量。"""
-
-DEFAULT_HOST = "0.0.0.0"
-DEFAULT_PORT = 8900
-DEFAULT_HOSTNAME = "localhost"
-DEFAULT_DATA_DIR = "~/.hermes/plugins/anp-agent/"
-DEFAULT_REQUEST_TIMEOUT = 60
-DEFAULT_FUTURE_TTL = 120

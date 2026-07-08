@@ -1,15 +1,11 @@
 """ANP 平台适配器单元测试。"""
 
-import os
 import sys
 from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
-
-# 插件目录名包含连字符，加入父目录到 sys.path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def _ensure_gateway_mocks():
@@ -74,8 +70,8 @@ def _ensure_gateway_mocks():
 _ensure_gateway_mocks()
 
 
-from adapter import ANPAdapter
-from config import ANPConfig
+from anp_agent.adapter import ANPAdapter
+from anp_agent.config import ANPConfig
 
 
 def _config(data_dir, **kwargs):
@@ -107,7 +103,7 @@ def anp_config(tmp_path):
 
 @pytest.fixture
 def mock_identity(monkeypatch):
-    from identity import ANPIdentity
+    from anp_agent.identity import ANPIdentity
 
     identity = ANPIdentity(
         did="did:wba:localhost:agent:e1_test",
@@ -116,17 +112,18 @@ def mock_identity(monkeypatch):
         data_dir=Path("/tmp/anp-test-adapter"),
     )
     monkeypatch.setattr(
-        "adapter.load_or_create_identity", lambda data_dir, hostname, endpoint=None: identity
+        "anp_agent.adapter.load_or_create_identity",
+        lambda data_dir, hostname, endpoint=None: identity,
     )
     return identity
 
 
 @pytest.fixture
 def mock_auth(monkeypatch):
-    from auth import ANPAuth
+    from anp_agent.auth import ANPAuth
 
     auth = MagicMock(spec=ANPAuth)
-    monkeypatch.setattr("adapter.create_auth", lambda identity: auth)
+    monkeypatch.setattr("anp_agent.adapter.create_auth", lambda identity: auth)
     return auth
 
 
@@ -163,11 +160,25 @@ async def test_send_anp_chat_id_sets_bridge_result(platform_config):
     bridge.set_result.return_value = True
     adapter._bridge = bridge
 
-    result = await adapter.send("anp:rpc-1", "reply content")
+    result = await adapter.send("anp:req-1", "reply content")
 
-    bridge.set_result.assert_called_once_with("rpc-1", "reply content")
+    bridge.set_result.assert_called_once_with("req-1", "reply content")
     assert result.success is True
-    assert result.message_id == "rpc-1"
+    assert result.message_id == "req-1"
+
+
+@pytest.mark.asyncio
+async def test_send_unknown_request_id_returns_failure(platform_config):
+    adapter = ANPAdapter(platform_config)
+    bridge = MagicMock()
+    bridge.set_result.return_value = False
+    adapter._bridge = bridge
+
+    result = await adapter.send("anp:req-missing", "reply content")
+
+    bridge.set_result.assert_called_once_with("req-missing", "reply content")
+    assert result.success is False
+    assert result.error == "request_id not found or already resolved"
 
 
 @pytest.mark.asyncio

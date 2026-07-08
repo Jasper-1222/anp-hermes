@@ -9,27 +9,19 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
 import pytest_asyncio
 from aiohttp.test_utils import TestClient, TestServer, unused_port
-
-# 插件目录名包含连字符，无法作为 Python 包导入，因此将插件根目录加入搜索路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from anp.authentication import create_did_wba_document
-from anp.authentication import did_wba_verifier as did_wba_verifier_module
-from anp.authentication.did_resolver import resolve_did_document
-from anp.authentication.did_wba import resolve_did_wba_document
 
-from auth import create_auth
-from bridge import ANPBridge, MessageEvent
-from config import ANPConfig
-from identity import load_or_create_identity
-from server import create_app
+from anp_agent.auth import _resolver_config, create_auth
+from anp_agent.bridge import ANPBridge, MessageEvent
+from anp_agent.config import ANPConfig
+from anp_agent.identity import load_or_create_identity
+from anp_agent.server import create_app
 from tests.helpers.did_server import DIDDocumentServer
 from tests.helpers.signing import build_signed_headers
 
@@ -99,17 +91,8 @@ async def anp_app(
     server_identity,
     did_server: DIDDocumentServer,
 ):
-    """构造带 patched resolver 的插件应用与测试客户端。"""
-    original_resolver = resolve_did_wba_document
-
-    async def _patched_resolver(did: str, verify_proof: bool = False):
-        return await resolve_did_document(
-            did,
-            base_url_override=did_server.base_url,
-            verify_proof=verify_proof,
-        )
-
-    did_wba_verifier_module.resolve_did_wba_document = _patched_resolver
+    """构造使用 loopback resolver override 的插件应用与测试客户端。"""
+    os.environ["ANP_DID_RESOLVER_BASE_URL"] = did_server.base_url
 
     try:
         # 先申请一个空闲端口，创建 config 时即使用实际端口，
@@ -148,7 +131,10 @@ async def anp_app(
         await client.close()
         await bridge.stop()
     finally:
-        did_wba_verifier_module.resolve_did_wba_document = original_resolver
+        os.environ.pop("ANP_DID_RESOLVER_BASE_URL", None)
+        _resolver_config["timeout"] = 10
+        _resolver_config["base_url"] = None
+        _resolver_config["verify_ssl"] = True
 
 
 @pytest.mark.asyncio

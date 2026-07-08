@@ -27,7 +27,7 @@ optional_env:
     prompt: "ANP 公开 endpoint"
     password: false
   - name: ANP_DATA_DIR
-    description: "DID 与私钥存储目录（默认：~/.hermes/plugins/anp-agent/）"
+    description: "DID 与私钥存储目录（默认：~/.hermes/data/anp-agent/）"
     prompt: "ANP 数据目录"
     password: false
   - name: ANP_REQUEST_TIMEOUT
