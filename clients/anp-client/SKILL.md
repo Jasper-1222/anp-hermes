@@ -32,21 +32,16 @@ python3 scripts/anp_client.py discover --endpoint http://127.0.0.1:8900
 python3 scripts/anp_client.py chat --endpoint http://127.0.0.1:8900 --message "你好"
 ```
 
-## 自然语言入口
+## 自然语言样例
 
-当用户说“通过 ANP 调用 http://127.0.0.1:8900 的服务智能体，问它‘你好’”，等价命令是：
+| 用户表达 | 等价参数 |
+| --- | --- |
+| `通过 ANP 调用 http://127.0.0.1:8900 的服务智能体，问它“你好”` | `action=chat endpoint=http://127.0.0.1:8900 message=你好` |
+| `请连接 http://127.0.0.1:8900/agent/ad.json 并发送：你好` | `action=chat ad_url=http://127.0.0.1:8900/agent/ad.json message=你好` |
+| `用 ANP client 向 http://127.0.0.1:8900 发送 hello` | `action=chat endpoint=http://127.0.0.1:8900 message=hello` |
+| `发现 http://127.0.0.1:8900 的 ANP 服务智能体` | `action=discover endpoint=http://127.0.0.1:8900` |
 
-```bash
-python3 scripts/anp_client.py chat --endpoint http://127.0.0.1:8900 --message "你好"
-```
-
-当用户说“发现 http://127.0.0.1:8900 的 ANP 服务智能体”，等价命令是：
-
-```bash
-python3 scripts/anp_client.py discover --endpoint http://127.0.0.1:8900
-```
-
-当用户提供 `/agent/ad.json` URL 时，使用 `--ad-url` 而不是 `--endpoint`。
+自然语言入口只用于把固定样例归一化为 `discover` 或 `chat` 参数。提供 `/agent/ad.json` URL 时，使用 `ad_url`；否则使用 `endpoint`。
 
 ## 安全规则
 

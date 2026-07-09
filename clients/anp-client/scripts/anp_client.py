@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass
 from ipaddress import ip_address
@@ -53,6 +54,36 @@ class ServiceInfo:
 def normalize_endpoint(endpoint: str) -> str:
     """规范化 endpoint。"""
     return endpoint.rstrip("/")
+
+
+_URL_RE = re.compile(r"https?://[^\s，,。'\"“”]+")
+_QUOTED_MESSAGE_RE = re.compile(r"[问问它]+[：:]?[“\"](?P<message>.+?)[”\"]")
+_SEND_MESSAGE_RE = re.compile(r"(?:发送|send)[：:\s]+(?P<message>.+)$", re.IGNORECASE)
+
+
+def normalize_natural_language(text: str) -> dict[str, str]:
+    """将 SKILL.md 承诺的固定自然语言样例规范化为命令参数。"""
+    stripped = text.strip()
+    match = _URL_RE.search(stripped)
+    if not match:
+        raise ClientError("未找到 ANP 服务 URL")
+    url = match.group(0).rstrip("，,。")
+    url_key = "ad_url" if url.endswith("/agent/ad.json") else "endpoint"
+
+    is_discover = "发现" in stripped or "discover" in stripped.lower()
+    has_chat_intent = any(keyword in stripped for keyword in ("问它", "发送", "chat"))
+    if is_discover and not has_chat_intent:
+        return {"action": "discover", url_key: url}
+
+    message_match = _QUOTED_MESSAGE_RE.search(stripped)
+    if message_match:
+        message = message_match.group("message").strip()
+    else:
+        send_match = _SEND_MESSAGE_RE.search(stripped)
+        if not send_match:
+            raise ClientError("未找到要发送的消息")
+        message = send_match.group("message").strip().strip("。")
+    return {"action": "chat", url_key: url, "message": message}
 
 
 def ensure_allowed_url(url: str) -> None:
