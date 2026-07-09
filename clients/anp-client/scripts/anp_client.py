@@ -5,11 +5,185 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import sys
+from dataclasses import dataclass
+from ipaddress import ip_address
+from typing import Any
+from urllib.parse import urljoin, urlparse
+
+import aiohttp
 
 from did_identity import IdentityError, load_or_create_identity
 from did_server import is_loopback_host, serve_did_document
+
+
+class ClientError(RuntimeError):
+    """anp-client 可展示给用户的错误。"""
+
+    def __init__(self, message: str, exit_code: int = 2) -> None:
+        super().__init__(message)
+        self.exit_code = exit_code
+
+
+@dataclass(frozen=True)
+class ServiceInfo:
+    """已发现的 ANP 服务智能体信息。"""
+
+    service_did: str
+    name: str
+    rpc_endpoint: str
+    interface_url: str
+    methods: list[str]
+
+    def to_json(self) -> dict[str, Any]:
+        """返回适合 CLI JSON 输出的结构。"""
+        return {
+            "service_did": self.service_did,
+            "name": self.name,
+            "rpc_endpoint": self.rpc_endpoint,
+            "interface_url": self.interface_url,
+            "methods": self.methods,
+        }
+
+
+def normalize_endpoint(endpoint: str) -> str:
+    """规范化 endpoint。"""
+    return endpoint.rstrip("/")
+
+
+def ensure_allowed_url(url: str) -> None:
+    """只允许 loopback HTTP 与 HTTPS URL。"""
+    parsed = urlparse(url)
+    if parsed.scheme == "https":
+        return
+    if parsed.scheme != "http":
+        raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint")
+    host = parsed.hostname or ""
+    if host == "localhost":
+        return
+    try:
+        if ip_address(host).is_loopback:
+            return
+    except ValueError:
+        pass
+    raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint")
+
+
+async def _fetch_json(session: aiohttp.ClientSession, url: str) -> dict[str, Any]:
+    """读取 JSON object，且不跟随 redirect。"""
+    ensure_allowed_url(url)
+    try:
+        async with session.get(
+            url, timeout=aiohttp.ClientTimeout(total=10), allow_redirects=False
+        ) as resp:
+            if 300 <= resp.status < 400:
+                raise ClientError(f"不支持 HTTP redirect: {url}")
+            if not 200 <= resp.status < 300:
+                raise ClientError(f"HTTP {resp.status}: {url}")
+            try:
+                data = await resp.json()
+            except (aiohttp.ContentTypeError, json.JSONDecodeError) as exc:
+                raise ClientError(f"响应不是 JSON: {url}") from exc
+    except ClientError:
+        raise
+    except aiohttp.ClientError as exc:
+        raise ClientError(f"无法连接服务智能体: {url}") from exc
+    if not isinstance(data, dict):
+        raise ClientError(f"响应不是 JSON object: {url}")
+    return data
+
+
+def _interface_url_from_ad(ad: dict[str, Any], ad_url: str, endpoint: str) -> str:
+    """从 Agent Description 选择 OpenRPC interface URL。"""
+    interfaces = ad.get("interfaces")
+    if isinstance(interfaces, list):
+        for item in interfaces:
+            if not isinstance(item, dict):
+                continue
+            is_openrpc = (
+                item.get("protocol") == "openrpc" or item.get("type") == "openrpc"
+            )
+            if is_openrpc and isinstance(item.get("url"), str):
+                return urljoin(ad_url, item["url"])
+    return f"{endpoint}/agent/interface.json"
+
+
+def _rpc_endpoint_from_interface(interface_doc: dict[str, Any], endpoint: str) -> str:
+    """从 OpenRPC servers 中选择 RPC endpoint，缺失时回退到 Hermes 默认路径。"""
+    servers = interface_doc.get("servers")
+    if isinstance(servers, list):
+        for server in servers:
+            if isinstance(server, dict) and isinstance(server.get("url"), str):
+                return urljoin(endpoint + "/", server["url"])
+    return f"{endpoint}/agent/rpc"
+
+
+def _methods_from_interface(interface_doc: dict[str, Any]) -> list[str]:
+    """从 OpenRPC 文档中提取方法名。"""
+    methods = interface_doc.get("methods")
+    if not isinstance(methods, list):
+        return []
+    names: list[str] = []
+    for method in methods:
+        if isinstance(method, dict) and isinstance(method.get("name"), str):
+            names.append(method["name"])
+    return names
+
+
+async def discover_service(
+    endpoint: str | None,
+    ad_url: str | None,
+    require_chat: bool = False,
+) -> ServiceInfo:
+    """发现服务智能体；按需确认 chat 方法存在。"""
+    if bool(endpoint) == bool(ad_url):
+        raise ClientError("必须且只能提供 --endpoint 或 --ad-url")
+
+    if endpoint:
+        normalized_endpoint = normalize_endpoint(endpoint)
+        ensure_allowed_url(normalized_endpoint)
+        resolved_ad_url = f"{normalized_endpoint}/agent/ad.json"
+    else:
+        resolved_ad_url = ad_url or ""
+        ensure_allowed_url(resolved_ad_url)
+        normalized_endpoint = ""
+
+    async with aiohttp.ClientSession() as session:
+        ad = await _fetch_json(session, resolved_ad_url)
+        if ad.get("protocolType") != "ANP":
+            raise ClientError("目标不是 ANP 服务智能体")
+
+        service_did = ad.get("did") or ad.get("id")
+        if not isinstance(service_did, str) or not service_did:
+            raise ClientError("Agent Description 缺少服务 DID")
+
+        name = ad.get("name") if isinstance(ad.get("name"), str) else "ANP 服务智能体"
+        ad_endpoint = ad.get("endpoint")
+        if not normalized_endpoint:
+            if not isinstance(ad_endpoint, str) or not ad_endpoint:
+                raise ClientError("Agent Description 缺少 RPC endpoint")
+            normalized_endpoint = normalize_endpoint(ad_endpoint)
+        ensure_allowed_url(normalized_endpoint)
+
+        interface_url = _interface_url_from_ad(ad, resolved_ad_url, normalized_endpoint)
+        ensure_allowed_url(interface_url)
+        interface_doc = await _fetch_json(session, interface_url)
+        rpc_endpoint = _rpc_endpoint_from_interface(interface_doc, normalized_endpoint)
+        ensure_allowed_url(rpc_endpoint)
+        methods = _methods_from_interface(interface_doc)
+        if require_chat and "chat" not in methods:
+            method_list = ", ".join(methods) if methods else "(none)"
+            raise ClientError(f"服务智能体未声明 chat 方法；已发现方法: {method_list}")
+
+        return ServiceInfo(
+            service_did=service_did,
+            name=name,
+            rpc_endpoint=rpc_endpoint,
+            interface_url=interface_url,
+            methods=methods,
+        )
 
 
 def _parse_port(value: str) -> int:
@@ -30,9 +204,17 @@ def build_parser() -> argparse.ArgumentParser:
     subcommands.add_parser("whoami", help="显示或创建个人智能体 DID")
 
     serve = subcommands.add_parser("serve-did", help="启动本地 DID 文档服务")
-    serve.add_argument("--host", default=os.environ.get("ANP_DID_SERVER_HOST", "127.0.0.1"))
-    serve.add_argument("--port", type=_parse_port, default=os.environ.get("ANP_DID_SERVER_PORT", "18900"))
-    serve.add_argument("--check-only", action="store_true", help="只校验配置，不启动长驻服务")
+    serve.add_argument(
+        "--host", default=os.environ.get("ANP_DID_SERVER_HOST", "127.0.0.1")
+    )
+    serve.add_argument(
+        "--port",
+        type=_parse_port,
+        default=os.environ.get("ANP_DID_SERVER_PORT", "18900"),
+    )
+    serve.add_argument(
+        "--check-only", action="store_true", help="只校验配置，不启动长驻服务"
+    )
 
     discover = subcommands.add_parser("discover", help="发现 ANP 服务智能体")
     discover.add_argument("--endpoint")
@@ -68,6 +250,22 @@ async def _cmd_serve_did(args: argparse.Namespace) -> int:
     return await serve_did_document(identity, host=args.host, port=args.port)
 
 
+async def _cmd_discover(args: argparse.Namespace) -> int:
+    """执行 discover 子命令。"""
+    service = await discover_service(endpoint=args.endpoint, ad_url=args.ad_url)
+    if args.json:
+        print(json.dumps(service.to_json(), ensure_ascii=False))
+        return 0
+    print(f"服务智能体: {service.name}")
+    print(f"服务 DID: {service.service_did}")
+    print(f"RPC endpoint: {service.rpc_endpoint}")
+    print(f"OpenRPC interface: {service.interface_url}")
+    print("可用方法:")
+    for method in service.methods:
+        print(f"  - {method}")
+    return 0
+
+
 def main() -> int:
     """CLI 入口。"""
     parser = build_parser()
@@ -77,8 +275,13 @@ def main() -> int:
             return _cmd_whoami()
         if args.command == "serve-did":
             return asyncio.run(_cmd_serve_did(args))
+        if args.command == "discover":
+            return asyncio.run(_cmd_discover(args))
         parser.error(f"命令尚未实现: {args.command}")
         return 2
+    except ClientError as exc:
+        print(str(exc), file=sys.stderr)
+        return exc.exit_code
     except IdentityError as exc:
         print(str(exc), file=sys.stderr)
         return 2
