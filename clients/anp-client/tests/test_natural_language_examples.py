@@ -16,7 +16,11 @@ from anp_client import ClientError, normalize_natural_language
         ),
         (
             "请连接 http://127.0.0.1:8900/agent/ad.json 并发送：你好",
-            {"action": "chat", "ad_url": "http://127.0.0.1:8900/agent/ad.json", "message": "你好"},
+            {
+                "action": "chat",
+                "ad_url": "http://127.0.0.1:8900/agent/ad.json",
+                "message": "你好",
+            },
         ),
         (
             "用 ANP client 向 http://127.0.0.1:8900 发送 hello",
@@ -28,7 +32,9 @@ from anp_client import ClientError, normalize_natural_language
         ),
     ],
 )
-def test_normalize_natural_language_examples(text: str, expected: dict[str, str]) -> None:
+def test_normalize_natural_language_examples(
+    text: str, expected: dict[str, str]
+) -> None:
     assert normalize_natural_language(text) == expected
 
 

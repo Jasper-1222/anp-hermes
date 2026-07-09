@@ -69,7 +69,9 @@ def test_load_identity_fails_when_no_identity_exists(client_home: Path) -> None:
 
 def test_load_or_create_fails_when_only_did_exists(client_home: Path) -> None:
     client_home.mkdir(parents=True)
-    (client_home / "did.json").write_text('{"id":"did:wba:localhost:agent:e1_missing"}', encoding="utf-8")
+    (client_home / "did.json").write_text(
+        '{"id":"did:wba:localhost:agent:e1_missing"}', encoding="utf-8"
+    )
 
     with pytest.raises(IdentityError, match="身份文件不完整"):
         load_or_create_identity(client_home)
@@ -102,7 +104,9 @@ def test_load_or_create_fails_when_did_document_has_no_id(client_home: Path) -> 
         load_or_create_identity(client_home)
 
 
-def test_load_or_create_fails_when_private_key_pem_is_invalid(client_home: Path) -> None:
+def test_load_or_create_fails_when_private_key_pem_is_invalid(
+    client_home: Path,
+) -> None:
     identity = load_or_create_identity(client_home)
     identity.key_path.write_text("not-a-real-key", encoding="utf-8")
 
@@ -110,7 +114,9 @@ def test_load_or_create_fails_when_private_key_pem_is_invalid(client_home: Path)
         load_or_create_identity(client_home)
 
 
-def test_load_or_create_fails_when_private_key_pem_is_encrypted(client_home: Path) -> None:
+def test_load_or_create_fails_when_private_key_pem_is_encrypted(
+    client_home: Path,
+) -> None:
     identity = load_or_create_identity(client_home)
     encrypted_pem = Ed25519PrivateKey.generate().private_bytes(
         encoding=serialization.Encoding.PEM,
@@ -133,7 +139,9 @@ def test_load_or_create_fails_when_authentication_is_missing(client_home: Path) 
         load_or_create_identity(client_home)
 
 
-def test_load_or_create_fails_when_private_key_does_not_match_did_document(client_home: Path, tmp_path: Path) -> None:
+def test_load_or_create_fails_when_private_key_does_not_match_did_document(
+    client_home: Path, tmp_path: Path
+) -> None:
     first = load_or_create_identity(client_home)
     second_home = tmp_path / "second-home"
     second = load_or_create_identity(second_home)
@@ -143,7 +151,9 @@ def test_load_or_create_fails_when_private_key_does_not_match_did_document(clien
         load_or_create_identity(client_home)
 
 
-def test_private_key_permission_is_repaired_before_mismatch_error(client_home: Path, tmp_path: Path) -> None:
+def test_private_key_permission_is_repaired_before_mismatch_error(
+    client_home: Path, tmp_path: Path
+) -> None:
     first = load_or_create_identity(client_home)
     second_home = tmp_path / "second-home"
     second = load_or_create_identity(second_home)

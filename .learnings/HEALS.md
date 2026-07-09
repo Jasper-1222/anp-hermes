@@ -405,3 +405,55 @@ Also re-ran the affected test suites after formatting:
 - First-Seen / Last-Seen: 2026-07-09
 
 ---
+
+## [HEAL-20260709-008] python_pep668_use_temp_venv
+
+**Logged**: 2026-07-09T15:40:00+08:00
+**Status**: verified
+**Trigger**: env-issue
+**Active-Context**: Task 8 quality gate dependency installation
+**Area**: python/dependencies
+**Priority**: medium
+
+### Failure
+`python3 -m pip install -r clients/anp-client/requirements-dev.txt` exited 1 before quality gates:
+
+```text
+error: externally-managed-environment
+× This environment is externally managed
+...
+hint: See PEP 668 for the detailed specification.
+```
+
+### Diagnosis
+The WSL2 system Python is marked as externally managed by the OS package manager. Installing verification dependencies into system site-packages is blocked by PEP 668. Overriding with `--break-system-packages` would mutate system Python and was not needed for this task.
+
+### Fix
+Created a temporary venv outside the repository and installed the same requirements there:
+
+```bash
+VENV_DIR="$(mktemp -d /tmp/anp-client-task8-venv.XXXXXX)"
+python3 -m venv "$VENV_DIR"
+"$VENV_DIR/bin/python" -m pip install -r clients/anp-client/requirements-dev.txt
+```
+
+Then ran black, ruff, and client pytest through the venv executables.
+
+### Verification
+The venv dependency install exited 0 and all affected gates passed:
+
+```text
+VENV_DIR=/tmp/anp-client-task8-venv.VU7DYr
+black --check ... -> 12 files would be left unchanged
+ruff check ... -> All checks passed!
+pytest clients/anp-client/tests -q -> 85 passed in 3.69s
+```
+
+### Metadata
+- Related Files: clients/anp-client/requirements-dev.txt
+- See Also: none
+- Pattern-Key: env.python_pep668_pip_install
+- Recurrence-Count: 1
+- First-Seen / Last-Seen: 2026-07-09
+
+---

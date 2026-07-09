@@ -16,7 +16,9 @@ CLIENT_ROOT = Path(__file__).resolve().parents[1]
 CLI = CLIENT_ROOT / "scripts" / "anp_client.py"
 
 
-def run_cli(args: list[str], env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+def run_cli(
+    args: list[str], env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(CLI), *args],
         text=True,
@@ -50,7 +52,11 @@ def test_format_url_host_wraps_ipv6_loopback() -> None:
 
 
 def test_serve_did_check_only_accepts_ipv6_loopback(client_home: Path) -> None:
-    env = {**os.environ, "ANP_CLIENT_HOME": str(client_home), "ANP_DID_SERVER_HOST": "::1"}
+    env = {
+        **os.environ,
+        "ANP_CLIENT_HOME": str(client_home),
+        "ANP_DID_SERVER_HOST": "::1",
+    }
     result = run_cli(["serve-did", "--check-only"], env=env)
 
     assert result.returncode == 0
@@ -69,7 +75,11 @@ def test_whoami_creates_identity(client_home: Path) -> None:
 
 
 def test_whoami_ignores_invalid_did_server_port(client_home: Path) -> None:
-    env = {**os.environ, "ANP_CLIENT_HOME": str(client_home), "ANP_DID_SERVER_PORT": "abc"}
+    env = {
+        **os.environ,
+        "ANP_CLIENT_HOME": str(client_home),
+        "ANP_DID_SERVER_PORT": "abc",
+    }
     result = run_cli(["whoami"], env=env)
 
     assert result.returncode == 0
@@ -78,7 +88,11 @@ def test_whoami_ignores_invalid_did_server_port(client_home: Path) -> None:
 
 
 def test_serve_did_check_only_rejects_invalid_env_port(client_home: Path) -> None:
-    env = {**os.environ, "ANP_CLIENT_HOME": str(client_home), "ANP_DID_SERVER_PORT": "abc"}
+    env = {
+        **os.environ,
+        "ANP_CLIENT_HOME": str(client_home),
+        "ANP_DID_SERVER_PORT": "abc",
+    }
     result = run_cli(["serve-did", "--check-only"], env=env)
 
     assert result.returncode == 2
@@ -87,7 +101,11 @@ def test_serve_did_check_only_rejects_invalid_env_port(client_home: Path) -> Non
 
 
 def test_serve_did_rejects_non_loopback(client_home: Path) -> None:
-    env = {**os.environ, "ANP_CLIENT_HOME": str(client_home), "ANP_DID_SERVER_HOST": "0.0.0.0"}
+    env = {
+        **os.environ,
+        "ANP_CLIENT_HOME": str(client_home),
+        "ANP_DID_SERVER_HOST": "0.0.0.0",
+    }
     result = run_cli(["serve-did", "--check-only"], env=env)
 
     assert result.returncode == 2

@@ -1,0 +1,8 @@
+Task 1: complete (commits dee4559..631efc6, review clean)
+Task 2: complete (commits 631efc6..af48bfb, review clean after fixes)
+Task 3: complete (commits af48bfb..0d7ea0e, review clean after fixes)
+Task 4: complete (commits 0d7ea0e..fe9fb0f, review clean after fixes)
+Task 5: complete (commits fe9fb0f..4041447, review clean after fixes)
+Task 6: complete (commits 4041447..cad84df, review clean)
+Task 7: complete (commits cad84df..9475ae3, review approved; minor follow-up candidates: subprocess timeout cleanup in test helpers; aiohttp_unused_port TOCTOU in new CLI integration tests)
+Task 8: complete (quality gates passed; client deps installed in temporary venv because system pip is PEP 668 externally managed; OpenSpec tasks 35/35 complete)

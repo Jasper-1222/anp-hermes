@@ -110,7 +110,11 @@ def _create_identity(root: Path) -> CallerIdentity:
     if not auth_key:
         raise IdentityError("DID 文档未生成 key-1 认证密钥")
     private_key_pem = auth_key[0]
-    _atomic_write_text(did_path, json.dumps(did_document, indent=2, ensure_ascii=False), _PUBLIC_FILE_MODE)
+    _atomic_write_text(
+        did_path,
+        json.dumps(did_document, indent=2, ensure_ascii=False),
+        _PUBLIC_FILE_MODE,
+    )
     _atomic_write_bytes(key_path, private_key_pem, _PRIVATE_KEY_MODE)
     return _load_from_paths(did_path, key_path)
 
@@ -132,7 +136,9 @@ def _load_from_paths(did_path: Path, key_path: Path) -> CallerIdentity:
         raise IdentityError(f"身份文件不完整: {did_path} / {key_path}")
     private_key = _load_private_key(key_path)
     _validate_did_document_key_match(did_document, private_key, did_path, key_path)
-    return CallerIdentity(did=did, did_document=did_document, did_path=did_path, key_path=key_path)
+    return CallerIdentity(
+        did=did, did_document=did_document, did_path=did_path, key_path=key_path
+    )
 
 
 def _load_private_key(key_path: Path) -> Ed25519PrivateKey:
@@ -157,7 +163,9 @@ def _authentication_method_id(did_document: dict[str, Any], did_path: Path) -> s
     return first
 
 
-def _public_key_multibase(did_document: dict[str, Any], method_id: str, did_path: Path) -> str:
+def _public_key_multibase(
+    did_document: dict[str, Any], method_id: str, did_path: Path
+) -> str:
     """从 verificationMethod 中取出认证公钥。"""
     methods = did_document.get("verificationMethod")
     if not isinstance(methods, list):
@@ -168,7 +176,9 @@ def _public_key_multibase(did_document: dict[str, Any], method_id: str, did_path
             if isinstance(value, str) and value:
                 return value
             raise IdentityError(f"DID 文档认证方法缺少 publicKeyMultibase: {did_path}")
-    raise IdentityError(f"DID 文档 verificationMethod 未包含 authentication: {did_path}")
+    raise IdentityError(
+        f"DID 文档 verificationMethod 未包含 authentication: {did_path}"
+    )
 
 
 def _validate_did_document_key_match(
