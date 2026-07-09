@@ -147,3 +147,76 @@ The replacement Plan subagent completed successfully and returned a usable imple
 - First-Seen / Last-Seen: 2026-07-08
 
 ---
+
+## [HEAL-20260709-001] regenerate_ignored_release_zip_for_packaging_tests
+
+**Logged**: 2026-07-09T00:00:00+08:00
+**Status**: verified
+**Trigger**: tool-failure
+**Active-Context**: subagent-driven-development baseline verification for add-anp-client-skill
+**Area**: tests/packaging
+**Priority**: medium
+
+### Failure
+Baseline verification in `plugins/anp-agent` failed:
+
+```bash
+python3 -m pytest tests/ -q
+```
+
+The suite reported `1 failed, 134 passed, 9 skipped`; the failing assertion was:
+
+```text
+tests/test_packaging.py::test_release_zip_contains_packaged_plugin_root_only
+AssertionError: plugins/anp-agent/anp-agent.zip does not exist
+```
+
+### Diagnosis
+`tests/test_packaging.py` intentionally validates the contents of `plugins/anp-agent/anp-agent.zip`, but `*.zip` is ignored by `.gitignore`, so a fresh git worktree created from tracked files does not contain this release artifact. The original checkout had an untracked `plugins/anp-agent/anp-agent.zip` with exactly the plugin root files (`plugin.yaml`, `__init__.py`, `README.md`, `pyproject.toml`, and `anp_agent/*.py`). This was an ignored artifact missing from the isolated worktree, not a source-code regression.
+
+### Fix
+Regenerated the ignored release artifact inside the worktree from tracked plugin files:
+
+```bash
+cd plugins/anp-agent
+python3 - <<'PY'
+from pathlib import Path
+from zipfile import ZIP_DEFLATED, ZipFile
+
+root = Path.cwd()
+zip_path = root / 'anp-agent.zip'
+include_files = [
+    root / 'plugin.yaml',
+    root / '__init__.py',
+    root / 'README.md',
+    root / 'pyproject.toml',
+]
+include_files.extend(sorted((root / 'anp_agent').rglob('*.py')))
+with ZipFile(zip_path, 'w', compression=ZIP_DEFLATED) as archive:
+    for path in include_files:
+        archive.write(path, path.relative_to(root).as_posix())
+print(zip_path)
+PY
+```
+
+### Verification
+Re-ran the original baseline command after regenerating the artifact:
+
+```bash
+cd plugins/anp-agent && python3 -m pytest tests/ -q
+```
+
+Observed:
+
+```text
+135 passed, 9 skipped in 5.77s
+```
+
+### Metadata
+- Related Files: plugins/anp-agent/tests/test_packaging.py, plugins/anp-agent/anp-agent.zip, .gitignore
+- See Also: none
+- Pattern-Key: tests.ignored_release_artifact_missing
+- Recurrence-Count: 1
+- First-Seen / Last-Seen: 2026-07-09
+
+---
