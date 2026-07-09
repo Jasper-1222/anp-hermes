@@ -117,9 +117,11 @@ def _create_identity(root: Path) -> CallerIdentity:
 
 def _load_from_paths(did_path: Path, key_path: Path) -> CallerIdentity:
     """从文件加载 DID WBA 身份。"""
+    if key_path.exists():
+        _chmod_private_key(key_path)
     try:
         did_document = json.loads(did_path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise IdentityError(f"DID 文档无法解析: {did_path}") from exc
     if not isinstance(did_document, dict):
         raise IdentityError(f"DID 文档必须是 JSON object: {did_path}")
@@ -130,7 +132,6 @@ def _load_from_paths(did_path: Path, key_path: Path) -> CallerIdentity:
         raise IdentityError(f"身份文件不完整: {did_path} / {key_path}")
     private_key = _load_private_key(key_path)
     _validate_did_document_key_match(did_document, private_key, did_path, key_path)
-    _chmod_private_key(key_path)
     return CallerIdentity(did=did, did_document=did_document, did_path=did_path, key_path=key_path)
 
 
@@ -138,7 +139,7 @@ def _load_private_key(key_path: Path) -> Ed25519PrivateKey:
     """解析 Ed25519 私钥 PEM。"""
     try:
         key = serialization.load_pem_private_key(key_path.read_bytes(), password=None)
-    except ValueError as exc:
+    except (TypeError, ValueError) as exc:
         raise IdentityError(f"私钥 PEM 无法解析: {key_path}") from exc
     if not isinstance(key, Ed25519PrivateKey):
         raise IdentityError(f"私钥不是 Ed25519: {key_path}")

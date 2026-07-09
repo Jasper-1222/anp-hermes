@@ -8,6 +8,8 @@ import stat
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from did_identity import (
     IdentityError,
@@ -49,6 +51,17 @@ def test_private_key_permission_is_0600(client_home: Path) -> None:
     assert mode == 0o600
 
 
+def test_load_identity_successfully_loads_existing_identity(client_home: Path) -> None:
+    created = load_or_create_identity(client_home)
+
+    loaded = load_identity(client_home)
+
+    assert loaded.did == created.did
+    assert loaded.did_document == created.did_document
+    assert loaded.did_path == created.did_path
+    assert loaded.key_path == created.key_path
+
+
 def test_load_identity_fails_when_no_identity_exists(client_home: Path) -> None:
     with pytest.raises(IdentityError, match="未找到个人智能体身份"):
         load_identity(client_home)
@@ -65,6 +78,15 @@ def test_load_or_create_fails_when_only_did_exists(client_home: Path) -> None:
 def test_load_or_create_fails_when_did_json_is_invalid(client_home: Path) -> None:
     client_home.mkdir(parents=True)
     (client_home / "did.json").write_text("not-json", encoding="utf-8")
+    (client_home / "private_key.pem").write_text("not-a-real-key", encoding="utf-8")
+
+    with pytest.raises(IdentityError, match="DID 文档无法解析"):
+        load_or_create_identity(client_home)
+
+
+def test_load_or_create_fails_when_did_json_is_not_utf8(client_home: Path) -> None:
+    client_home.mkdir(parents=True)
+    (client_home / "did.json").write_bytes(b"\xff\xfe")
     (client_home / "private_key.pem").write_text("not-a-real-key", encoding="utf-8")
 
     with pytest.raises(IdentityError, match="DID 文档无法解析"):
@@ -88,6 +110,19 @@ def test_load_or_create_fails_when_private_key_pem_is_invalid(client_home: Path)
         load_or_create_identity(client_home)
 
 
+def test_load_or_create_fails_when_private_key_pem_is_encrypted(client_home: Path) -> None:
+    identity = load_or_create_identity(client_home)
+    encrypted_pem = Ed25519PrivateKey.generate().private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.BestAvailableEncryption(b"passphrase"),
+    )
+    identity.key_path.write_bytes(encrypted_pem)
+
+    with pytest.raises(IdentityError, match="私钥 PEM 无法解析"):
+        load_or_create_identity(client_home)
+
+
 def test_load_or_create_fails_when_authentication_is_missing(client_home: Path) -> None:
     identity = load_or_create_identity(client_home)
     doc = dict(identity.did_document)
@@ -106,3 +141,17 @@ def test_load_or_create_fails_when_private_key_does_not_match_did_document(clien
 
     with pytest.raises(IdentityError, match="私钥与 DID 文档不匹配"):
         load_or_create_identity(client_home)
+
+
+def test_private_key_permission_is_repaired_before_mismatch_error(client_home: Path, tmp_path: Path) -> None:
+    first = load_or_create_identity(client_home)
+    second_home = tmp_path / "second-home"
+    second = load_or_create_identity(second_home)
+    shutil.copyfile(second.key_path, first.key_path)
+    first.key_path.chmod(0o644)
+
+    with pytest.raises(IdentityError, match="私钥与 DID 文档不匹配"):
+        load_or_create_identity(client_home)
+
+    mode = stat.S_IMODE(first.key_path.stat().st_mode)
+    assert mode == 0o600
