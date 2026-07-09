@@ -220,3 +220,130 @@ Observed:
 - First-Seen / Last-Seen: 2026-07-09
 
 ---
+
+
+## [HEAL-20260709-002] pytest_async_main_invocation
+
+**Logged**: 2026-07-09T13:00:00+08:00
+**Status**: verified
+**Trigger**: tool-failure
+**Active-Context**: Task 5 TDD GREEN phase
+**Area**: tests/anp-client
+**Priority**: low
+
+### Failure
+After implementing Task 5 chat helpers, the GREEN command failed:
+
+```bash
+python3 -m pytest clients/anp-client/tests/test_chat.py -q
+```
+
+Observed result:
+
+```text
+1 failed, 13 passed
+RuntimeError: asyncio.run() cannot be called from a running event loop
+RuntimeWarning: coroutine '_cmd_chat' was never awaited
+```
+
+The failure came from `test_main_chat_reports_client_error_without_traceback`, which called the synchronous `anp_client.main()` function from inside a `@pytest.mark.asyncio` test.
+
+### Diagnosis
+`anp_client.main()` is intentionally synchronous and dispatches async subcommands with `asyncio.run(...)`. Marking a test that calls `main()` as async creates an already-running pytest-asyncio event loop, so `asyncio.run()` fails before exercising CLI error handling. This was a test-shape error, not a production CLI bug.
+
+### Fix
+Removed the async marker and async function definition from `test_main_chat_reports_client_error_without_traceback`, leaving it as a normal synchronous pytest test while still monkeypatching `chat_service` with an async fake.
+
+### Verification
+Re-ran the original failing command:
+
+```bash
+python3 -m pytest clients/anp-client/tests/test_chat.py -q
+```
+
+Observed:
+
+```text
+14 passed in 0.22s
+```
+
+Then re-ran the requested client suite:
+
+```bash
+python3 -m pytest clients/anp-client/tests -q
+```
+
+Observed:
+
+```text
+75 passed in 3.04s
+```
+
+### Metadata
+- Related Files: clients/anp-client/tests/test_chat.py
+- See Also: none
+- Pattern-Key: python.pytest_asyncio_run_in_running_loop
+- Recurrence-Count: 1
+- First-Seen / Last-Seen: 2026-07-09
+
+---
+
+
+## [HEAL-20260709-003] black_formatting_after_task5_edits
+
+**Logged**: 2026-07-09T13:05:00+08:00
+**Status**: verified
+**Trigger**: tool-failure
+**Active-Context**: Task 5 verify gate
+**Area**: formatting/anp-client
+**Priority**: low
+
+### Failure
+The formatting check failed after implementing Task 5:
+
+```bash
+python3 -m black --check clients/anp-client/scripts/anp_client.py clients/anp-client/scripts/signing.py clients/anp-client/tests/test_chat.py
+```
+
+Observed:
+
+```text
+would reformat clients/anp-client/tests/test_chat.py
+would reformat clients/anp-client/scripts/anp_client.py
+```
+
+### Diagnosis
+The implementation was correct but manual edits exceeded Black line-wrapping rules in the new chat implementation/tests. Ruff and whitespace checks were clean, so the issue was formatter-only.
+
+### Fix
+Ran Black on the changed Python files:
+
+```bash
+python3 -m black clients/anp-client/scripts/anp_client.py clients/anp-client/scripts/signing.py clients/anp-client/tests/test_chat.py
+```
+
+### Verification
+Re-ran the original formatting check and the requested tests:
+
+```bash
+python3 -m black --check clients/anp-client/scripts/anp_client.py clients/anp-client/scripts/signing.py clients/anp-client/tests/test_chat.py
+python3 -m pytest clients/anp-client/tests/test_chat.py -q
+python3 -m pytest clients/anp-client/tests -q
+```
+
+Observed:
+
+```text
+3 files would be left unchanged.
+14 passed in 0.22s
+75 passed in 2.90s
+```
+
+### Metadata
+- Related Files: clients/anp-client/scripts/anp_client.py, clients/anp-client/tests/test_chat.py
+- See Also: none
+- Pattern-Key: python.black_formatting_required
+- Recurrence-Count: 1
+- First-Seen / Last-Seen: 2026-07-09
+
+---
