@@ -117,15 +117,16 @@ def _interface_url_from_ad(ad: dict[str, Any], ad_url: str, endpoint: str) -> st
     return f"{endpoint}/agent/interface.json"
 
 
-def _rpc_endpoint_from_interface(interface_doc: dict[str, Any], interface_url: str) -> str:
+def _rpc_endpoint_from_interface(
+    interface_doc: dict[str, Any], interface_url: str, normalized_endpoint: str
+) -> str:
     """从 OpenRPC servers 中选择 RPC endpoint。"""
     servers = interface_doc.get("servers")
     if isinstance(servers, list):
         for server in servers:
             if isinstance(server, dict) and isinstance(server.get("url"), str):
                 return urljoin(interface_url, server["url"])
-    parsed = urlparse(interface_url)
-    return f"{parsed.scheme}://{parsed.netloc}/agent/rpc"
+    return f"{normalized_endpoint}/agent/rpc"
 
 
 def _methods_from_interface(interface_doc: dict[str, Any]) -> list[str]:
@@ -178,7 +179,9 @@ async def discover_service(
         interface_url = _interface_url_from_ad(ad, resolved_ad_url, normalized_endpoint)
         ensure_allowed_url(interface_url)
         interface_doc = await _fetch_json(session, interface_url)
-        rpc_endpoint = _rpc_endpoint_from_interface(interface_doc, interface_url)
+        rpc_endpoint = _rpc_endpoint_from_interface(
+            interface_doc, interface_url, normalized_endpoint
+        )
         ensure_allowed_url(rpc_endpoint)
         methods = _methods_from_interface(interface_doc)
         if require_chat and "chat" not in methods:

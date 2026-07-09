@@ -126,6 +126,39 @@ async def test_discover_service_from_endpoint() -> None:
 
 
 @pytest.mark.asyncio
+async def test_discover_service_fallback_rpc_uses_endpoint_base_path() -> None:
+    endpoint = ""
+
+    async def ad_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "带 base path 服务",
+                "did": "did:wba:localhost:agent:e1_base_path",
+                "endpoint": endpoint,
+                "interfaces": [
+                    {"type": "openrpc", "url": f"{endpoint}/agent/interface.json"}
+                ],
+            }
+        )
+
+    async def interface_handler(request: web.Request) -> web.Response:
+        return web.json_response({"openrpc": "1.3.2", "methods": [{"name": "chat"}]})
+
+    app = web.Application()
+    app.router.add_get("/anp/agent/ad.json", ad_handler)
+    app.router.add_get("/anp/agent/interface.json", interface_handler)
+    runner, origin = await _start_app(app)
+    endpoint = f"{origin}/anp"
+    try:
+        service = await discover_service(endpoint=endpoint, ad_url=None)
+    finally:
+        await runner.cleanup()
+
+    assert service.rpc_endpoint == f"{endpoint}/agent/rpc"
+
+
+@pytest.mark.asyncio
 async def test_discover_rejects_non_anp_agent() -> None:
     async def ad_handler(request: web.Request) -> web.Response:
         return web.json_response({"protocolType": "OTHER"})

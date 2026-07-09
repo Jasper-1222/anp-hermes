@@ -47,6 +47,16 @@
 - `ServiceInfo.to_json()`：已返回 methods 拷贝，避免暴露内部列表引用。
 - 测试端口绑定：已用 port=0 + `runner.addresses` 替代 `aiohttp_unused_port`。
 
+## Important finding 修复：RPC fallback 保留 endpoint base path
+
+- 审查发现：OpenRPC 缺少 `servers` 时，`_rpc_endpoint_from_interface()` 从 `interface_url` 的 origin 生成 `/agent/rpc`，会丢失服务 `endpoint` 中的 `/anp` 等 base path。
+- RED：先新增回归测试 `test_discover_service_fallback_rpc_uses_endpoint_base_path`，覆盖 `endpoint=http://127.0.0.1:<port>/anp` 且 OpenRPC 无 `servers` 的场景。
+- 红灯命令：`python3 -m pytest clients/anp-client/tests/test_discovery.py -q`：按预期失败，1 failed / 28 passed；断言显示实际值为 `http://127.0.0.1:<port>/agent/rpc`，期望为 `http://127.0.0.1:<port>/anp/agent/rpc`。
+- 修复：`_rpc_endpoint_from_interface()` 增加 `normalized_endpoint` 参数；显式 `servers[].url` 仍按 `interface_url` 解析相对 URL，缺少 `servers` 时回退为 `f"{normalized_endpoint}/agent/rpc"`。
+- 绿灯命令：`python3 -m pytest clients/anp-client/tests/test_discovery.py -q`：29 passed in 1.21s。
+- 全量客户端测试：`python3 -m pytest clients/anp-client/tests -q`：61 passed in 2.98s。
+
 ## Concerns
 
 - 无阻塞 concerns。当前实现允许任意 HTTPS URL，符合 brief 提供的安全策略；若后续要限制 HTTPS 域名或禁止公网，需要另开任务明确策略。
+
