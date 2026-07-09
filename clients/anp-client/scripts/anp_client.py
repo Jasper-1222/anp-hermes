@@ -86,56 +86,65 @@ def normalize_natural_language(text: str) -> dict[str, str]:
     return {"action": "chat", url_key: url, "message": message}
 
 
-def ensure_allowed_url(url: str) -> None:
-    """只允许 loopback HTTP 与 HTTPS URL。"""
+def canonicalize_allowed_url(url: str) -> str:
+    """校验 URL 安全边界，并返回实际用于签名和请求的 URL。"""
     try:
         parsed = urlparse(url)
         host = parsed.hostname
+        _ = parsed.port
     except ValueError as exc:
         raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint") from exc
-    if parsed.scheme == "https":
+    if parsed.fragment or parsed.username or parsed.password:
+        raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint")
+    scheme = parsed.scheme.lower()
+    if scheme == "https":
         if not host:
             raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint")
-        return
-    if parsed.scheme != "http":
+        return url
+    if scheme != "http":
         raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint")
     if not host:
         raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint")
     if host == "localhost":
-        return
+        return url
     try:
         if ip_address(host).is_loopback:
-            return
+            return url
     except ValueError:
         pass
     raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint")
 
 
+def ensure_allowed_url(url: str) -> None:
+    """只允许 loopback HTTP 与 HTTPS URL。"""
+    canonicalize_allowed_url(url)
+
+
 async def _fetch_json(session: aiohttp.ClientSession, url: str) -> dict[str, Any]:
     """读取 JSON object，且不跟随 redirect。"""
-    ensure_allowed_url(url)
+    request_url = canonicalize_allowed_url(url)
     try:
         async with session.get(
-            url, timeout=aiohttp.ClientTimeout(total=10), allow_redirects=False
+            request_url, timeout=aiohttp.ClientTimeout(total=10), allow_redirects=False
         ) as resp:
             if 300 <= resp.status < 400:
-                raise ClientError(f"不支持 HTTP redirect: {url}")
+                raise ClientError(f"不支持 HTTP redirect: {request_url}")
             if not 200 <= resp.status < 300:
-                raise ClientError(f"HTTP {resp.status}: {url}")
+                raise ClientError(f"HTTP {resp.status}: {request_url}")
             try:
                 data = await resp.json()
             except (aiohttp.ContentTypeError, json.JSONDecodeError) as exc:
-                raise ClientError(f"响应不是 JSON: {url}") from exc
+                raise ClientError(f"响应不是 JSON: {request_url}") from exc
     except ClientError:
         raise
     except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-        raise ClientError(f"无法连接服务智能体: {url}") from exc
+        raise ClientError(f"无法连接服务智能体: {request_url}") from exc
     if not isinstance(data, dict):
-        raise ClientError(f"响应不是 JSON object: {url}")
+        raise ClientError(f"响应不是 JSON object: {request_url}")
     return data
 
 
-def _interface_url_from_ad(ad: dict[str, Any], ad_url: str, endpoint: str) -> str:
+def _interface_url_from_ad(ad: dict[str, Any], ad_url: str) -> str:
     """从 Agent Description 选择 OpenRPC interface URL。"""
     interfaces = ad.get("interfaces")
     if isinstance(interfaces, list):
@@ -145,9 +154,9 @@ def _interface_url_from_ad(ad: dict[str, Any], ad_url: str, endpoint: str) -> st
             is_openrpc = (
                 item.get("protocol") == "openrpc" or item.get("type") == "openrpc"
             )
-            if is_openrpc and isinstance(item.get("url"), str):
+            if is_openrpc and isinstance(item.get("url"), str) and item["url"]:
                 return urljoin(ad_url, item["url"])
-    return f"{endpoint}/agent/interface.json"
+    raise ClientError("Agent Description 缺少 OpenRPC interface 引用")
 
 
 def _rpc_endpoint_from_interface(
@@ -184,12 +193,10 @@ async def discover_service(
         raise ClientError("必须且只能提供 --endpoint 或 --ad-url")
 
     if endpoint:
-        normalized_endpoint = normalize_endpoint(endpoint)
-        ensure_allowed_url(normalized_endpoint)
+        normalized_endpoint = normalize_endpoint(canonicalize_allowed_url(endpoint))
         resolved_ad_url = f"{normalized_endpoint}/agent/ad.json"
     else:
-        resolved_ad_url = ad_url or ""
-        ensure_allowed_url(resolved_ad_url)
+        resolved_ad_url = canonicalize_allowed_url(ad_url or "")
         normalized_endpoint = ""
 
     async with aiohttp.ClientSession() as session:
@@ -200,22 +207,27 @@ async def discover_service(
         service_did = ad.get("did") or ad.get("id")
         if not isinstance(service_did, str) or not service_did:
             raise ClientError("Agent Description 缺少服务 DID")
+        if not service_did.startswith("did:wba:"):
+            raise ClientError("服务 DID 必须是 did:wba:")
 
         name = ad.get("name") if isinstance(ad.get("name"), str) else "ANP 服务智能体"
         ad_endpoint = ad.get("endpoint")
-        if not normalized_endpoint:
-            if not isinstance(ad_endpoint, str) or not ad_endpoint:
-                raise ClientError("Agent Description 缺少 RPC endpoint")
-            normalized_endpoint = normalize_endpoint(ad_endpoint)
-        ensure_allowed_url(normalized_endpoint)
+        if not isinstance(ad_endpoint, str) or not ad_endpoint:
+            raise ClientError("Agent Description 缺少 RPC endpoint")
+        ad_endpoint = normalize_endpoint(canonicalize_allowed_url(ad_endpoint))
+        if normalized_endpoint and normalized_endpoint != ad_endpoint:
+            raise ClientError("Agent Description RPC endpoint 与请求 endpoint 不一致")
+        normalized_endpoint = ad_endpoint
 
-        interface_url = _interface_url_from_ad(ad, resolved_ad_url, normalized_endpoint)
-        ensure_allowed_url(interface_url)
-        interface_doc = await _fetch_json(session, interface_url)
-        rpc_endpoint = _rpc_endpoint_from_interface(
-            interface_doc, interface_url, normalized_endpoint
+        interface_url = canonicalize_allowed_url(
+            _interface_url_from_ad(ad, resolved_ad_url)
         )
-        ensure_allowed_url(rpc_endpoint)
+        interface_doc = await _fetch_json(session, interface_url)
+        rpc_endpoint = canonicalize_allowed_url(
+            _rpc_endpoint_from_interface(
+                interface_doc, interface_url, normalized_endpoint
+            )
+        )
         methods = _methods_from_interface(interface_doc)
         if require_chat and "chat" not in methods:
             method_list = ", ".join(methods) if methods else "(none)"
@@ -273,33 +285,33 @@ async def _post_chat_json(
     headers: dict[str, str],
 ) -> tuple[dict[str, Any], int]:
     """发送 chat JSON-RPC POST，并把 HTTP/JSON 错误转为 ClientError。"""
-    ensure_allowed_url(url)
+    request_url = canonicalize_allowed_url(url)
     try:
         async with session.post(
-            url,
+            request_url,
             data=body,
             headers=headers,
             timeout=aiohttp.ClientTimeout(total=60),
             allow_redirects=False,
         ) as resp:
             if 300 <= resp.status < 400:
-                raise ClientError(f"不支持 HTTP redirect: {url}")
+                raise ClientError(f"不支持 HTTP redirect: {request_url}")
             try:
                 data = await resp.json()
             except (aiohttp.ContentTypeError, json.JSONDecodeError) as exc:
                 if not 200 <= resp.status < 300:
-                    raise ClientError(f"HTTP {resp.status}: {url}") from exc
-                raise ClientError(f"响应不是 JSON: {url}") from exc
+                    raise ClientError(f"HTTP {resp.status}: {request_url}") from exc
+                raise ClientError(f"响应不是 JSON: {request_url}") from exc
             if not 200 <= resp.status < 300:
                 error = data.get("error") if isinstance(data, dict) else None
                 if isinstance(error, dict):
                     raise ClientError(format_rpc_error(error), exit_code=1)
-                raise ClientError(f"HTTP {resp.status}: {url}")
+                raise ClientError(f"HTTP {resp.status}: {request_url}")
             return data, resp.status
     except ClientError:
         raise
     except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-        raise ClientError(f"无法连接服务智能体: {url}") from exc
+        raise ClientError(f"无法连接服务智能体: {request_url}") from exc
 
 
 async def chat_service(

@@ -104,6 +104,65 @@ def test_load_or_create_fails_when_did_document_has_no_id(client_home: Path) -> 
         load_or_create_identity(client_home)
 
 
+def test_load_identity_rejects_non_wba_did_even_when_key_matches(
+    client_home: Path,
+) -> None:
+    identity = load_or_create_identity(client_home)
+    doc = json.loads(json.dumps(identity.did_document))
+    attacker_did = "did:example:caller"
+    doc["id"] = attacker_did
+    doc["verificationMethod"][0]["id"] = f"{attacker_did}#key-1"
+    doc["verificationMethod"][0]["controller"] = attacker_did
+    doc["authentication"] = [f"{attacker_did}#key-1"]
+    identity.did_path.write_text(json.dumps(doc), encoding="utf-8")
+
+    with pytest.raises(IdentityError, match="did:wba:"):
+        load_identity(client_home)
+
+
+@pytest.mark.parametrize("loader", [load_identity, load_or_create_identity])
+def test_identity_loaders_reject_non_wba_did_even_when_key_matches(
+    client_home: Path,
+    loader,
+) -> None:
+    identity = load_or_create_identity(client_home)
+    doc = json.loads(json.dumps(identity.did_document))
+    attacker_did = "did:cn:caller"
+    doc["id"] = attacker_did
+    doc["verificationMethod"][0]["id"] = f"{attacker_did}#key-1"
+    doc["verificationMethod"][0]["controller"] = attacker_did
+    doc["authentication"] = [f"{attacker_did}#key-1"]
+    identity.did_path.write_text(json.dumps(doc), encoding="utf-8")
+
+    with pytest.raises(IdentityError, match="did:wba:"):
+        loader(client_home)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("authentication", ["did:wba:localhost:agent:e1_other#key-1"]),
+        ("controller", "did:wba:localhost:agent:e1_other"),
+    ],
+)
+def test_load_or_create_fails_when_authentication_method_or_controller_mismatches_did(
+    client_home: Path,
+    field: str,
+    value,
+) -> None:
+    identity = load_or_create_identity(client_home)
+    doc = json.loads(json.dumps(identity.did_document))
+    if field == "authentication":
+        doc["authentication"] = value
+        doc["verificationMethod"][0]["id"] = value[0]
+    else:
+        doc["verificationMethod"][0][field] = value
+    identity.did_path.write_text(json.dumps(doc), encoding="utf-8")
+
+    with pytest.raises(IdentityError, match="DID 文档认证方法"):
+        load_or_create_identity(client_home)
+
+
 def test_load_or_create_fails_when_private_key_pem_is_invalid(
     client_home: Path,
 ) -> None:

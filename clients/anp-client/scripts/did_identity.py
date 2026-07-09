@@ -132,6 +132,8 @@ def _load_from_paths(did_path: Path, key_path: Path) -> CallerIdentity:
     did = did_document.get("id")
     if not isinstance(did, str) or not did:
         raise IdentityError(f"DID 文档缺少 id: {did_path}")
+    if not did.startswith("did:wba:"):
+        raise IdentityError(f"个人智能体 DID 必须是 did:wba: {did_path}")
     if not key_path.exists():
         raise IdentityError(f"身份文件不完整: {did_path} / {key_path}")
     private_key = _load_private_key(key_path)
@@ -164,14 +166,20 @@ def _authentication_method_id(did_document: dict[str, Any], did_path: Path) -> s
 
 
 def _public_key_multibase(
-    did_document: dict[str, Any], method_id: str, did_path: Path
+    did_document: dict[str, Any], method_id: str, did: str, did_path: Path
 ) -> str:
     """从 verificationMethod 中取出认证公钥。"""
+    if not method_id.startswith(f"{did}#"):
+        raise IdentityError(f"DID 文档认证方法与 id 不一致: {did_path}")
     methods = did_document.get("verificationMethod")
     if not isinstance(methods, list):
         raise IdentityError(f"DID 文档缺少 verificationMethod: {did_path}")
     for method in methods:
         if isinstance(method, dict) and method.get("id") == method_id:
+            if method.get("controller") != did:
+                raise IdentityError(
+                    f"DID 文档认证方法 controller 与 id 不一致: {did_path}"
+                )
             value = method.get("publicKeyMultibase")
             if isinstance(value, str) and value:
                 return value
@@ -188,8 +196,9 @@ def _validate_did_document_key_match(
     key_path: Path,
 ) -> None:
     """确认私钥对应 DID 文档 authentication 公钥。"""
+    did = did_document["id"]
     method_id = _authentication_method_id(did_document, did_path)
-    multibase_value = _public_key_multibase(did_document, method_id, did_path)
+    multibase_value = _public_key_multibase(did_document, method_id, did, did_path)
     if not multibase_value.startswith("z"):
         raise IdentityError(f"DID 文档认证公钥不是 base58btc Multikey: {did_path}")
     try:

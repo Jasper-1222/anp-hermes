@@ -31,52 +31,52 @@
 
 ### Create
 
-- `clients/anp-client/SKILL.md`  
+- `clients/anp-client/SKILL.md`
   Skill 入口说明。定义个人智能体/服务智能体术语、自然语言触发规则、命令式调用、能力边界和安全限制。
 
-- `clients/anp-client/README.md`  
+- `clients/anp-client/README.md`
   面向用户的安装、依赖、最小本地 E2E、故障排查和生产 DID 托管说明。
 
-- `clients/anp-client/requirements.txt`  
+- `clients/anp-client/requirements.txt`
   自包含 skill 运行时依赖：`anp>=0.8.8,<0.9.0`、`aiohttp>=3.9.0`、`cryptography>=42.0.0`、`base58>=2.1.1`。
 
-- `clients/anp-client/requirements-dev.txt`  
+- `clients/anp-client/requirements-dev.txt`
   源码仓库验证依赖：pytest、pytest-asyncio、black、ruff；不要求进入最终用户安装包。
 
-- `clients/anp-client/scripts/did_identity.py`  
+- `clients/anp-client/scripts/did_identity.py`
   管理个人智能体 DID WBA 身份：默认目录、环境变量覆盖、生成、加载、校验、私钥权限。
 
-- `clients/anp-client/scripts/did_server.py`  
+- `clients/anp-client/scripts/did_server.py`
   本地 loopback DID 文档服务：根据 DID path segments 暴露 `/agent/e1_<fingerprint>/did.json`。
 
-- `clients/anp-client/scripts/signing.py`  
+- `clients/anp-client/scripts/signing.py`
   用 `DIDWbaAuthHeader` 对实际发送的 JSON-RPC body 生成 DID WBA HTTP Signature 请求头。
 
-- `clients/anp-client/scripts/anp_client.py`  
+- `clients/anp-client/scripts/anp_client.py`
   CLI 入口和业务编排：`whoami`、`serve-did`、`discover`、`chat`、URL 安全校验、AD/OpenRPC 解析、JSON 输出、错误提示、自然语言样例 normalizer。
 
-- `clients/anp-client/tests/conftest.py`  
+- `clients/anp-client/tests/conftest.py`
   将 `clients/anp-client/scripts/` 加入测试 import path，提供临时 `ANP_CLIENT_HOME` 和本地 `aiohttp_unused_port` fixture。
 
-- `clients/anp-client/tests/test_identity.py`  
+- `clients/anp-client/tests/test_identity.py`
   测试 DID 身份生成、复用、权限、损坏错误和 `ANP_CLIENT_HOME` 覆盖。
 
-- `clients/anp-client/tests/test_discovery.py`  
+- `clients/anp-client/tests/test_discovery.py`
   测试 URL 安全策略、endpoint/ad-url Agent Description/OpenRPC 解析、`discover --json` 输出结构、缺少 `chat` 的 discover/chat 差异行为和 HTTP 错误。
 
-- `clients/anp-client/tests/test_chat.py`  
+- `clients/anp-client/tests/test_chat.py`
   测试 JSON-RPC `chat` body、签名头、错误提示映射、HTTP/JSON-RPC 错误和 `--json` 成功输出解析。
 
-- `clients/anp-client/tests/test_cli.py`  
+- `clients/anp-client/tests/test_cli.py`
   测试 CLI 子命令解析、返回码和 stdout/stderr 基本契约。
 
-- `clients/anp-client/tests/test_natural_language_examples.py`  
+- `clients/anp-client/tests/test_natural_language_examples.py`
   测试固定自然语言样例到命令式参数的 deterministic normalizer。
 
-- `clients/anp-client/tests/test_package_boundary.py`  
+- `clients/anp-client/tests/test_package_boundary.py`
   测试 self-contained skill 安装包边界：无运行态 DID/私钥、无软链接、无仓库绝对路径依赖。
 
-- `plugins/anp-agent/tests/e2e/test_anp_client_skill.py`  
+- `plugins/anp-agent/tests/e2e/test_anp_client_skill.py`
   基于现有 Hermes gateway fixture 的真实 E2E：用 `anp-client` CLI 发现服务智能体并发送 `chat --json`。
 
 ### Reuse / Reference

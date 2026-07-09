@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import stat
 import sys
 from pathlib import Path
 
@@ -34,6 +35,8 @@ async def test_anp_client_skill_discovers_and_chats_with_hermes(
     client_script = repo_root / "clients" / "anp-client" / "scripts" / "anp_client.py"
     endpoint = hermes_gateway["endpoint"]
     client_home = Path(anp_caller_identity["did_path"]).parent
+    key_mode = stat.S_IMODE(Path(anp_caller_identity["key_path"]).stat().st_mode)
+    assert key_mode == 0o600
     env = dict(os.environ, ANP_CLIENT_HOME=str(client_home))
 
     discover_returncode, discover_stdout, discover_stderr = await run_cli_async(

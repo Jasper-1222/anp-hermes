@@ -347,11 +347,25 @@ python3 -m pytest clients/anp-client/tests -q
 75 passed in 2.90s
 ```
 
+2026-07-09 最终整分支审查修复中再次出现同类 Black drift，运行：
+
+```bash
+python3 -m black <7 个本次修改的 Python 文件>
+python3 -m black --check <同 7 个文件>
+```
+
+观察到：
+
+```text
+4 files reformatted, 3 files left unchanged.
+7 files would be left unchanged.
+```
+
 ### Metadata
-- Related Files: clients/anp-client/scripts/anp_client.py, clients/anp-client/tests/test_chat.py
-- See Also: none
+- Related Files: clients/anp-client/scripts/anp_client.py, clients/anp-client/scripts/did_identity.py, clients/anp-client/tests/test_discovery.py, clients/anp-client/tests/test_chat.py, plugins/anp-agent/tests/e2e/conftest.py
+- See Also: HEAL-20260709-001
 - Pattern-Key: python.black_formatting_required
-- Recurrence-Count: 1
+- Recurrence-Count: 2
 - First-Seen / Last-Seen: 2026-07-09
 
 ---
@@ -453,6 +467,54 @@ pytest clients/anp-client/tests -q -> 85 passed in 3.69s
 - Related Files: clients/anp-client/requirements-dev.txt
 - See Also: none
 - Pattern-Key: env.python_pep668_pip_install
+- Recurrence-Count: 1
+- First-Seen / Last-Seen: 2026-07-09
+
+---
+
+## [HEAL-20260709-009] branch_diff_check_whitespace_cleanup
+
+**Logged**: 2026-07-09T00:00:00+08:00
+**Status**: verified
+**Trigger**: tool-failure
+**Active-Context**: final branch review fix gate
+**Area**: git/formatting
+**Priority**: low
+
+### Failure
+
+最终整分支验证命令失败：
+
+```bash
+git diff --check 22c4f56..HEAD
+```
+
+输出包含 `.superpowers/sdd/task-4-report.md:62: new blank line at EOF`，以及 `docs/superpowers/plans/2026-07-09-add-anp-client-skill.md` 多行 trailing whitespace、`openspec/specs/anp-client-skill/spec.md:234: new blank line at EOF`。
+
+### Diagnosis
+
+`.superpowers/` scratch 文件仍在历史 diff 范围内被跟踪，且计划文档中为 Markdown 硬换行留下的两个尾随空格会被 `git diff --check` 视为错误。OpenSpec 主 spec 末尾也有额外空行。单纯运行当前工作树测试不能发现这些跨提交 diff whitespace 问题。
+
+### Fix
+
+- 执行 `git rm --cached -r .superpowers`，把 ignored scratch 报告从索引移除并保留工作树文件。
+- 对 `docs/superpowers/plans/2026-07-09-add-anp-client-skill.md` 去除行尾空格。
+- 对 `openspec/specs/anp-client-skill/spec.md` 去除 EOF 多余空行。
+
+### Verification
+
+复跑包含工作树修改的空白检查：
+
+```bash
+git diff --check 22c4f56
+```
+
+观察到退出码 0、无输出。最终提交后仍需复跑用户要求的精确命令 `git diff --check 22c4f56..HEAD`。
+
+### Metadata
+- Related Files: docs/superpowers/plans/2026-07-09-add-anp-client-skill.md, openspec/specs/anp-client-skill/spec.md, .superpowers/
+- See Also: none
+- Pattern-Key: git.diff_check_trailing_whitespace
 - Recurrence-Count: 1
 - First-Seen / Last-Seen: 2026-07-09
 

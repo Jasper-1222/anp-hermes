@@ -9,7 +9,7 @@ TBD - created by archiving change add-anp-client-skill. Update Purpose after arc
 #### Scenario: skill 目录可独立复制
 - **WHEN** 用户复制或安装 `clients/anp-client/` 目录
 - **THEN** 该目录包含运行所需的 `SKILL.md`、脚本文件和依赖说明
-- **AND** 运行脚本不需要导入 `/home/peter/anp-hermes` 仓库中的非 skill 路径文件
+- **AND** 运行脚本不需要导入安装包外的仓库源码路径文件
 
 #### Scenario: 角色术语清晰
 - **WHEN** 用户阅读 `SKILL.md` 或 README
@@ -27,7 +27,7 @@ TBD - created by archiving change add-anp-client-skill. Update Purpose after arc
 #### Scenario: 安装包安全检查
 - **WHEN** 执行发布前检查
 - **THEN** 检查确认安装包内容不包含 `did.json`、`private_key.pem`、临时文件、备份文件或软链接
-- **AND** 检查确认安装包脚本不包含 `/home/peter/anp-hermes` 这类仓库绝对路径
+- **AND** 检查确认安装包脚本不包含当前仓库根目录或其他本机绝对路径依赖
 
 ### Requirement: 命令式客户端入口
 `anp-client` skill SHALL 提供命令式 Python CLI，至少支持 `whoami`、`serve-did`、`discover` 和 `chat` 四个入口，作为跨宿主稳定验收标准。
@@ -231,4 +231,3 @@ TBD - created by archiving change add-anp-client-skill. Update Purpose after arc
 - **WHEN** 运行客户端 skill E2E 测试
 - **THEN** 测试使用真实 Hermes `anp-agent` 服务智能体验证 `discover` 能发现 `chat`
 - **AND** `chat --json` 返回包含 `response` 的成功结果
-

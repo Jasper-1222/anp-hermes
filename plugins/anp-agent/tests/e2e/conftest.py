@@ -109,6 +109,7 @@ def anp_caller_identity(tmp_path: Path) -> dict[str, Any]:
     key_path = workdir / "private_key.pem"
     did_path.write_text(json.dumps(did_document), encoding="utf-8")
     key_path.write_bytes(private_key_pem)
+    key_path.chmod(0o600)
 
     return {
         "did": did,
@@ -192,7 +193,11 @@ def _start_hermes_gateway(
     config["plugins"]["enabled"] = list(
         set(config.get("plugins", {}).get("enabled", []) + ["anp-agent"])
     )
-    config["skills"] = {"external_dirs": [], "template_vars": True, "inline_shell": False}
+    config["skills"] = {
+        "external_dirs": [],
+        "template_vars": True,
+        "inline_shell": False,
+    }
 
     # 支持通过环境变量覆盖真实 LLM provider（用于一次性 E2E 验证）
     override_provider = os.environ.get("ANP_E2E_LLM_PROVIDER", "")
@@ -269,7 +274,12 @@ def _start_hermes_gateway(
             except subprocess.TimeoutExpired:
                 proc.kill()
             pytest.fail(f"Hermes gateway 未能在 60 秒内启动，endpoint={endpoint}")
-        return {"endpoint": endpoint, "process": proc, "home": hermes_home, "_log_file": log_file}
+        return {
+            "endpoint": endpoint,
+            "process": proc,
+            "home": hermes_home,
+            "_log_file": log_file,
+        }
     except Exception:
         proc.terminate()
         try:
@@ -339,7 +349,9 @@ def _validate_llm_e2e_prerequisites(config) -> dict[str, Any]:
     model_cfg = user_config.get("model", {})
     provider = model_cfg.get("provider", "")
     if not provider:
-        pytest.skip("真实 ~/.hermes/config.yaml 未配置 model.provider，跳过 LLM E2E 测试")
+        pytest.skip(
+            "真实 ~/.hermes/config.yaml 未配置 model.provider，跳过 LLM E2E 测试"
+        )
 
     key_env = _PROVIDER_API_KEY_ENV.get(provider.lower())
     override_key_env = os.environ.get("ANP_E2E_LLM_KEY_ENV", "")

@@ -71,11 +71,23 @@ def test_ensure_allowed_url_accepts_safe_urls(url: str) -> None:
         "http://[::1/agent/ad.json",
         "https://",
         "https:///agent/ad.json",
+        "http://user:pass@127.0.0.1:8900/agent/rpc",
+        "https://user@example.com/agent/ad.json",
+        "http://127.0.0.1:8900/agent/rpc#fragment",
+        "https://example.com/agent/ad.json#fragment",
+        "http://127.0.0.1:99999/agent/rpc",
     ],
 )
 def test_ensure_allowed_url_rejects_unsafe_urls(url: str) -> None:
     with pytest.raises(ClientError, match="只允许 loopback HTTP 或 HTTPS"):
         ensure_allowed_url(url)
+
+
+def test_canonicalize_allowed_url_preserves_valid_request_target() -> None:
+    assert (
+        anp_client.canonicalize_allowed_url("http://127.0.0.1:8900/agent/rpc?trace=1")
+        == "http://127.0.0.1:8900/agent/rpc?trace=1"
+    )
 
 
 def test_normalize_endpoint_strips_trailing_slash() -> None:
@@ -176,6 +188,97 @@ async def test_discover_service_fallback_rpc_uses_endpoint_base_path() -> None:
         await runner.cleanup()
 
     assert service.rpc_endpoint == f"{endpoint}/agent/rpc"
+
+
+@pytest.mark.asyncio
+async def test_discover_service_rejects_non_wba_service_did() -> None:
+    endpoint = ""
+
+    async def ad_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "错误 DID 服务",
+                "did": "did:example:evil",
+                "endpoint": endpoint,
+                "interfaces": [
+                    {"type": "openrpc", "url": f"{endpoint}/agent/interface.json"}
+                ],
+            }
+        )
+
+    async def interface_handler(request: web.Request) -> web.Response:
+        return web.json_response({"openrpc": "1.3.2", "methods": [{"name": "chat"}]})
+
+    app = web.Application()
+    app.router.add_get("/agent/ad.json", ad_handler)
+    app.router.add_get("/agent/interface.json", interface_handler)
+    runner, endpoint = await _start_app(app)
+    try:
+        with pytest.raises(ClientError, match="服务 DID 必须是 did:wba:"):
+            await discover_service(endpoint=endpoint, ad_url=None)
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_discover_service_requires_ad_endpoint_field() -> None:
+    endpoint = ""
+
+    async def ad_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "缺少 endpoint 服务",
+                "did": "did:wba:localhost:agent:e1_missing_endpoint",
+                "interfaces": [
+                    {"type": "openrpc", "url": f"{endpoint}/agent/interface.json"}
+                ],
+            }
+        )
+
+    async def interface_handler(request: web.Request) -> web.Response:
+        return web.json_response({"openrpc": "1.3.2", "methods": [{"name": "chat"}]})
+
+    app = web.Application()
+    app.router.add_get("/agent/ad.json", ad_handler)
+    app.router.add_get("/agent/interface.json", interface_handler)
+    runner, endpoint = await _start_app(app)
+    try:
+        with pytest.raises(ClientError, match="Agent Description 缺少 RPC endpoint"):
+            await discover_service(endpoint=endpoint, ad_url=None)
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_discover_service_requires_openrpc_interface_reference() -> None:
+    endpoint = ""
+
+    async def ad_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "缺少 interface 服务",
+                "did": "did:wba:localhost:agent:e1_missing_interface",
+                "endpoint": endpoint,
+            }
+        )
+
+    async def interface_handler(request: web.Request) -> web.Response:
+        return web.json_response({"openrpc": "1.3.2", "methods": [{"name": "chat"}]})
+
+    app = web.Application()
+    app.router.add_get("/agent/ad.json", ad_handler)
+    app.router.add_get("/agent/interface.json", interface_handler)
+    runner, endpoint = await _start_app(app)
+    try:
+        with pytest.raises(
+            ClientError, match="Agent Description 缺少 OpenRPC interface"
+        ):
+            await discover_service(endpoint=endpoint, ad_url=None)
+    finally:
+        await runner.cleanup()
 
 
 @pytest.mark.asyncio
