@@ -5,6 +5,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
+import sys
+from pathlib import Path
 
 import pytest
 from aiohttp import web
@@ -16,6 +19,23 @@ from anp_client import (
     ensure_allowed_url,
     normalize_endpoint,
 )
+
+CLIENT_ROOT = Path(__file__).resolve().parents[1]
+CLI = CLIENT_ROOT / "scripts" / "anp_client.py"
+
+
+async def run_cli_async(args: list[str], env: dict[str, str]) -> tuple[int, str, str]:
+    """在 async 测试中运行 CLI，避免阻塞 aiohttp mock server 的 event loop。"""
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        str(CLI),
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
+    return proc.returncode or 0, stdout.decode(), stderr.decode()
 
 
 async def _start_app(app: web.Application) -> tuple[web.AppRunner, str]:
@@ -269,7 +289,9 @@ async def test_discover_service_from_ad_url_derives_rpc_endpoint() -> None:
     app.router.add_get("/agent/interface.json", interface_handler)
     runner, endpoint = await _start_app(app)
     try:
-        service = await discover_service(endpoint=None, ad_url=f"{endpoint}/agent/ad.json")
+        service = await discover_service(
+            endpoint=None, ad_url=f"{endpoint}/agent/ad.json"
+        )
     finally:
         await runner.cleanup()
 
@@ -323,7 +345,9 @@ async def test_discover_service_selects_openrpc_interface_and_server_url() -> No
 
 
 @pytest.mark.asyncio
-async def test_discover_service_resolves_relative_server_url_from_interface_url() -> None:
+async def test_discover_service_resolves_relative_server_url_from_interface_url() -> (
+    None
+):
     endpoint = ""
 
     async def ad_handler(request: web.Request) -> web.Response:
@@ -367,7 +391,9 @@ async def test_discover_service_reports_http_failure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_discover_service_reports_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_discover_service_reports_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     endpoint = ""
 
     async def ad_handler(request: web.Request) -> web.Response:
@@ -558,3 +584,51 @@ async def test_cmd_discover_prints_json(
         "interface_url": "http://127.0.0.1:8900/agent/interface.json",
         "methods": ["chat"],
     }
+
+
+@pytest.mark.asyncio
+async def test_discover_cli_json_output(aiohttp_unused_port, client_home: Path) -> None:
+    port = aiohttp_unused_port()
+    endpoint = f"http://127.0.0.1:{port}"
+
+    async def ad_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "CLI 服务",
+                "did": "did:wba:localhost:agent:e1_cli",
+                "endpoint": endpoint,
+                "interfaces": [
+                    {"type": "openrpc", "url": f"{endpoint}/agent/interface.json"}
+                ],
+            }
+        )
+
+    async def interface_handler(request: web.Request) -> web.Response:
+        return web.json_response({"methods": [{"name": "chat"}]})
+
+    app = web.Application()
+    app.router.add_get("/agent/ad.json", ad_handler)
+    app.router.add_get("/agent/interface.json", interface_handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", port)
+    await site.start()
+    try:
+        env = dict(os.environ, ANP_CLIENT_HOME=str(client_home))
+        returncode, stdout, stderr = await run_cli_async(
+            ["discover", "--endpoint", endpoint, "--json"],
+            env=env,
+        )
+    finally:
+        await runner.cleanup()
+
+    assert returncode == 0, stderr
+    data = json.loads(stdout)
+    assert data["service_did"] == "did:wba:localhost:agent:e1_cli"
+    assert data["name"] == "CLI 服务"
+    assert data["rpc_endpoint"] == f"{endpoint}/agent/rpc"
+    assert data["interface_url"] == f"{endpoint}/agent/interface.json"
+    assert data["methods"] == ["chat"]
+    assert not (client_home / "did.json").exists()
+    assert not (client_home / "private_key.pem").exists()

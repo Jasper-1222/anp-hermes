@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
+import os
+import sys
+from pathlib import Path
 
 import pytest
 from aiohttp import web
@@ -12,6 +16,23 @@ import anp_client
 from anp_client import ClientError, build_chat_body, chat_service, format_rpc_error
 from did_identity import load_or_create_identity
 from signing import build_signed_headers
+
+CLIENT_ROOT = Path(__file__).resolve().parents[1]
+CLI = CLIENT_ROOT / "scripts" / "anp_client.py"
+
+
+async def run_cli_async(args: list[str], env: dict[str, str]) -> tuple[int, str, str]:
+    """在 async 测试中运行 CLI，避免阻塞 aiohttp mock server 的 event loop。"""
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        str(CLI),
+        *args,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=env,
+    )
+    stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=15)
+    return proc.returncode or 0, stdout.decode(), stderr.decode()
 
 
 async def _start_app(app: web.Application) -> tuple[web.AppRunner, str]:
@@ -501,3 +522,57 @@ async def test_cmd_chat_prints_json(
         "jsonrpc_id": "chat-json",
         "response": "hello",
     }
+
+
+@pytest.mark.asyncio
+async def test_chat_cli_json_output(aiohttp_unused_port, client_home: Path) -> None:
+    load_or_create_identity(client_home)
+    port = aiohttp_unused_port()
+    endpoint = f"http://127.0.0.1:{port}"
+    captured_headers: dict[str, str] = {}
+
+    async def ad_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "CLI Echo",
+                "did": "did:wba:localhost:agent:e1_cli_echo",
+                "endpoint": endpoint,
+                "interfaces": [
+                    {"type": "openrpc", "url": f"{endpoint}/agent/interface.json"}
+                ],
+            }
+        )
+
+    async def interface_handler(request: web.Request) -> web.Response:
+        return web.json_response({"methods": [{"name": "chat"}]})
+
+    async def rpc_handler(request: web.Request) -> web.Response:
+        captured_headers.update(dict(request.headers))
+        body = await request.json()
+        return web.json_response(
+            {"jsonrpc": "2.0", "id": body["id"], "result": {"response": "pong"}}
+        )
+
+    app = web.Application()
+    app.router.add_get("/agent/ad.json", ad_handler)
+    app.router.add_get("/agent/interface.json", interface_handler)
+    app.router.add_post("/agent/rpc", rpc_handler)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", port)
+    await site.start()
+    try:
+        env = dict(os.environ, ANP_CLIENT_HOME=str(client_home))
+        returncode, stdout, stderr = await run_cli_async(
+            ["chat", "--endpoint", endpoint, "--message", "ping", "--json"],
+            env=env,
+        )
+    finally:
+        await runner.cleanup()
+
+    assert returncode == 0, stderr
+    assert "Signature" in captured_headers
+    data = json.loads(stdout)
+    assert data["service_did"] == "did:wba:localhost:agent:e1_cli_echo"
+    assert data["response"] == "pong"
