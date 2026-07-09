@@ -7,8 +7,8 @@ This file provides guidance to Claude Code when working in this repository. Keep
 本项目目标是为 ANP（Agent Network Protocol）社区贡献一个高质量 Hermes 接入参考实现：通过 Hermes 插件机制，让 Hermes 智能体作为 ANP 网络上的服务智能体被发现和调用。
 
 硬约束：
-- 使用 ANP 原生 DID WBA 身份（`did:wba:`），不使用 `did:cn` 或其他 DID 方法。
-- 不依赖 DTR、Portal、Mediator、OpenClaw 等外部基础设施；仅使用 ANP Python SDK 与 Hermes 插件机制。
+- 使用 ANP 原生 DID WBA 身份（`did:wba:`）。
+- 仅使用 ANP Python SDK 与 Hermes 插件机制。
 - 插件必须零侵入 Hermes 核心代码，便于社区贡献和独立发布。
 - 第一期仅实现身份认证 + JSON-RPC 调用；AP2 支付和 E2EE 加密延后。
 - Hermes tool RPC 是默认关闭的可选能力，只能在显式 allowlist/denylist 与 caller DID 授权后暴露低风险工具。

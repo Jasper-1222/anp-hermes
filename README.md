@@ -133,7 +133,7 @@ gateway:
 
 ## 设计约束
 
-- 使用 ANP 原生 DID WBA 身份（`did:wba:`），不使用 `did:cn` 或其他 DID 方法。
+- 使用 ANP 原生 DID WBA 身份（`did:wba:`）。
 - 不依赖 DTR、Portal、Mediator、OpenClaw 等外部基础设施。
 - 仅依赖 ANP Python SDK（`anp>=0.8.8,<0.9.0`）和 Hermes 插件机制。
 - 第一期仅实现身份认证 + JSON-RPC 调用；AP2 支付与 E2EE 加密放到后续。

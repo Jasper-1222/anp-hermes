@@ -2,7 +2,10 @@
 
 > 注：已纳入本次实现计划的工作项不在此处重复跟踪。TODO-1（调研 anp SDK verifier 正确用法）已作为工程审查任务 T3 进入实施计划。
 
-## 后续阶段
+- **TODO-5: 支持个人智能体公开 DID 托管或 hostname 初始化**
+  - 上下文：`add-anp-client-skill` 第一期默认生成 `did:wba:localhost...`，signed `chat` 只承诺同机 loopback 服务智能体；HTTPS endpoint 仅表示传输安全策略允许，远程服务通常无法解析本机 localhost DID。
+  - 目标：设计 `anp-client` 的公开 DID 文档托管或显式 hostname 初始化能力，使个人智能体可被远程 HTTPS 服务智能体解析和认证。
+  - 依赖：第一期 `clients/anp-client/` 自包含 skill、身份管理、`serve-did` 本地开发链路完成后再评估。
 
 - **TODO-2: 支持 AP2 支付协议**
   - 上下文：设计文档 §11 后续待办；第一期明确排除。

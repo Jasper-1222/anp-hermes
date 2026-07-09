@@ -111,3 +111,39 @@ This verified that the previous push had reached the remote or the remote had be
 - First-Seen / Last-Seen: 2026-07-08
 
 ---
+
+## [HEAL-20260708-003] subagent_context_overflow_retry
+
+**Logged**: 2026-07-08T00:00:00+08:00
+**Status**: verified
+**Trigger**: tool-failure
+**Active-Context**: brainstorming design planning for ANP client skill
+**Area**: agent-orchestration
+**Priority**: low
+
+### Failure
+A Plan subagent launched to design the ANP client skill terminated early with an API 502 and this error:
+
+```text
+API Error: 502 Your input exceeds the context window of this model. Please adjust your input and try again.
+```
+
+The failure blocked using the Plan agent output for the design phase.
+
+### Diagnosis
+The original subagent prompt included more context than the selected agent/model path could accept, despite the main session having a large context window. The task did not require all prior context verbatim; it only needed the settled product decisions and key reusable files.
+
+### Fix
+Relaunched the planning subagent with a shorter prompt, explicitly limited to the confirmed decisions and critical file references, and used a smaller model override for a concise planning pass.
+
+### Verification
+The replacement Plan subagent completed successfully and returned a usable implementation/design outline covering directory structure, script boundaries, command format, DID strategy, discovery/chat flow, error handling, and tests.
+
+### Metadata
+- Related Files: none
+- See Also: none
+- Pattern-Key: agent.context_window_overflow
+- Recurrence-Count: 1
+- First-Seen / Last-Seen: 2026-07-08
+
+---
