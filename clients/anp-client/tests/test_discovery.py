@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 
 import pytest
@@ -15,6 +16,17 @@ from anp_client import (
     ensure_allowed_url,
     normalize_endpoint,
 )
+
+
+async def _start_app(app: web.Application) -> tuple[web.AppRunner, str]:
+    """用系统分配端口启动测试 HTTP 服务。"""
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "127.0.0.1", 0)
+    await site.start()
+    address = runner.addresses[0]
+    port = address[1]
+    return runner, f"http://127.0.0.1:{port}"
 
 
 @pytest.mark.parametrize(
@@ -31,7 +43,15 @@ def test_ensure_allowed_url_accepts_safe_urls(url: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "url", ["http://example.com", "http://192.168.1.10:8900", "ftp://127.0.0.1"]
+    "url",
+    [
+        "http://example.com",
+        "http://192.168.1.10:8900",
+        "ftp://127.0.0.1",
+        "http://[::1/agent/ad.json",
+        "https://",
+        "https:///agent/ad.json",
+    ],
 )
 def test_ensure_allowed_url_rejects_unsafe_urls(url: str) -> None:
     with pytest.raises(ClientError, match="只允许 loopback HTTP 或 HTTPS"):
@@ -42,10 +62,24 @@ def test_normalize_endpoint_strips_trailing_slash() -> None:
     assert normalize_endpoint("http://127.0.0.1:8900/") == "http://127.0.0.1:8900"
 
 
+def test_service_info_to_json_copies_methods() -> None:
+    service = anp_client.ServiceInfo(
+        service_did="did:wba:localhost:agent:e1_service",
+        name="测试服务",
+        rpc_endpoint="http://127.0.0.1:8900/agent/rpc",
+        interface_url="http://127.0.0.1:8900/agent/interface.json",
+        methods=["chat"],
+    )
+
+    data = service.to_json()
+    data["methods"].append("anp.get_capabilities")
+
+    assert service.methods == ["chat"]
+
+
 @pytest.mark.asyncio
-async def test_discover_service_from_endpoint(aiohttp_unused_port) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
+async def test_discover_service_from_endpoint() -> None:
+    endpoint = ""
 
     async def ad_handler(request: web.Request) -> web.Response:
         return web.json_response(
@@ -71,10 +105,7 @@ async def test_discover_service_from_endpoint(aiohttp_unused_port) -> None:
     app = web.Application()
     app.router.add_get("/agent/ad.json", ad_handler)
     app.router.add_get("/agent/interface.json", interface_handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", port)
-    await site.start()
+    runner, endpoint = await _start_app(app)
     try:
         service = await discover_service(endpoint=endpoint, ad_url=None)
     finally:
@@ -95,19 +126,13 @@ async def test_discover_service_from_endpoint(aiohttp_unused_port) -> None:
 
 
 @pytest.mark.asyncio
-async def test_discover_rejects_non_anp_agent(aiohttp_unused_port) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
-
+async def test_discover_rejects_non_anp_agent() -> None:
     async def ad_handler(request: web.Request) -> web.Response:
         return web.json_response({"protocolType": "OTHER"})
 
     app = web.Application()
     app.router.add_get("/agent/ad.json", ad_handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", port)
-    await site.start()
+    runner, endpoint = await _start_app(app)
     try:
         with pytest.raises(ClientError, match="目标不是 ANP 服务智能体"):
             await discover_service(endpoint=endpoint, ad_url=None)
@@ -116,11 +141,8 @@ async def test_discover_rejects_non_anp_agent(aiohttp_unused_port) -> None:
 
 
 @pytest.mark.asyncio
-async def test_discover_service_allows_missing_chat_for_discover(
-    aiohttp_unused_port,
-) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
+async def test_discover_service_allows_missing_chat_for_discover() -> None:
+    endpoint = ""
 
     async def ad_handler(request: web.Request) -> web.Response:
         return web.json_response(
@@ -143,10 +165,7 @@ async def test_discover_service_allows_missing_chat_for_discover(
     app = web.Application()
     app.router.add_get("/agent/ad.json", ad_handler)
     app.router.add_get("/agent/interface.json", interface_handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", port)
-    await site.start()
+    runner, endpoint = await _start_app(app)
     try:
         service = await discover_service(endpoint=endpoint, ad_url=None)
     finally:
@@ -156,11 +175,8 @@ async def test_discover_service_allows_missing_chat_for_discover(
 
 
 @pytest.mark.asyncio
-async def test_discover_service_requires_chat_for_chat_calls(
-    aiohttp_unused_port,
-) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
+async def test_discover_service_requires_chat_for_chat_calls() -> None:
+    endpoint = ""
 
     async def ad_handler(request: web.Request) -> web.Response:
         return web.json_response(
@@ -183,10 +199,7 @@ async def test_discover_service_requires_chat_for_chat_calls(
     app = web.Application()
     app.router.add_get("/agent/ad.json", ad_handler)
     app.router.add_get("/agent/interface.json", interface_handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", port)
-    await site.start()
+    runner, endpoint = await _start_app(app)
     try:
         with pytest.raises(ClientError, match="服务智能体未声明 chat 方法"):
             await discover_service(endpoint=endpoint, ad_url=None, require_chat=True)
@@ -195,12 +208,8 @@ async def test_discover_service_requires_chat_for_chat_calls(
 
 
 @pytest.mark.asyncio
-async def test_discover_service_from_ad_url_derives_rpc_endpoint(
-    aiohttp_unused_port,
-) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
-    ad_url = f"{endpoint}/agent/ad.json"
+async def test_discover_service_from_ad_url_derives_rpc_endpoint() -> None:
+    endpoint = ""
 
     async def ad_handler(request: web.Request) -> web.Response:
         return web.json_response(
@@ -225,12 +234,9 @@ async def test_discover_service_from_ad_url_derives_rpc_endpoint(
     app = web.Application()
     app.router.add_get("/agent/ad.json", ad_handler)
     app.router.add_get("/agent/interface.json", interface_handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", port)
-    await site.start()
+    runner, endpoint = await _start_app(app)
     try:
-        service = await discover_service(endpoint=None, ad_url=ad_url)
+        service = await discover_service(endpoint=None, ad_url=f"{endpoint}/agent/ad.json")
     finally:
         await runner.cleanup()
 
@@ -240,12 +246,8 @@ async def test_discover_service_from_ad_url_derives_rpc_endpoint(
 
 
 @pytest.mark.asyncio
-async def test_discover_service_selects_openrpc_interface_and_server_url(
-    aiohttp_unused_port,
-) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
-    custom_rpc = f"{endpoint}/custom/rpc"
+async def test_discover_service_selects_openrpc_interface_and_server_url() -> None:
+    endpoint = ""
 
     async def ad_handler(request: web.Request) -> web.Response:
         return web.json_response(
@@ -269,7 +271,7 @@ async def test_discover_service_selects_openrpc_interface_and_server_url(
         return web.json_response(
             {
                 "openrpc": "1.3.2",
-                "servers": [{"url": custom_rpc}],
+                "servers": [{"url": f"{endpoint}/custom/rpc"}],
                 "methods": [{"name": "chat"}],
             }
         )
@@ -277,42 +279,99 @@ async def test_discover_service_selects_openrpc_interface_and_server_url(
     app = web.Application()
     app.router.add_get("/agent/ad.json", ad_handler)
     app.router.add_get("/agent/interface.json", interface_handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", port)
-    await site.start()
+    runner, endpoint = await _start_app(app)
     try:
         service = await discover_service(endpoint=endpoint, ad_url=None)
     finally:
         await runner.cleanup()
 
     assert service.interface_url == f"{endpoint}/agent/interface.json"
-    assert service.rpc_endpoint == custom_rpc
+    assert service.rpc_endpoint == f"{endpoint}/custom/rpc"
 
 
 @pytest.mark.asyncio
-async def test_discover_service_reports_http_failure(aiohttp_unused_port) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
+async def test_discover_service_resolves_relative_server_url_from_interface_url() -> None:
+    endpoint = ""
 
+    async def ad_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "相对 RPC 服务",
+                "did": "did:wba:localhost:agent:e1_relative",
+                "endpoint": endpoint,
+                "interfaces": [
+                    {"type": "openrpc", "url": f"{endpoint}/agent/interface.json"}
+                ],
+            }
+        )
+
+    async def interface_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "openrpc": "1.3.2",
+                "servers": [{"url": "rpc"}],
+                "methods": [{"name": "chat"}],
+            }
+        )
+
+    app = web.Application()
+    app.router.add_get("/agent/ad.json", ad_handler)
+    app.router.add_get("/agent/interface.json", interface_handler)
+    runner, endpoint = await _start_app(app)
+    try:
+        service = await discover_service(endpoint=endpoint, ad_url=None)
+    finally:
+        await runner.cleanup()
+
+    assert service.rpc_endpoint == f"{endpoint}/agent/rpc"
+
+
+@pytest.mark.asyncio
+async def test_discover_service_reports_http_failure() -> None:
     with pytest.raises(ClientError, match="无法连接服务智能体"):
-        await discover_service(endpoint=endpoint, ad_url=None)
+        await discover_service(endpoint="http://127.0.0.1:1", ad_url=None)
 
 
 @pytest.mark.asyncio
-async def test_discover_service_reports_non_2xx_status(aiohttp_unused_port) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
+async def test_discover_service_reports_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    endpoint = ""
 
+    async def ad_handler(request: web.Request) -> web.Response:
+        await asyncio.sleep(1)
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "超时服务",
+                "did": "did:wba:localhost:agent:e1_timeout",
+                "endpoint": endpoint,
+            }
+        )
+
+    app = web.Application()
+    app.router.add_get("/agent/ad.json", ad_handler)
+    runner, endpoint = await _start_app(app)
+    original_timeout = anp_client.aiohttp.ClientTimeout
+    monkeypatch.setattr(
+        anp_client.aiohttp,
+        "ClientTimeout",
+        lambda total: original_timeout(total=0.01),
+    )
+    try:
+        with pytest.raises(ClientError, match="无法连接服务智能体"):
+            await discover_service(endpoint=endpoint, ad_url=None)
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_discover_service_reports_non_2xx_status() -> None:
     async def ad_handler(request: web.Request) -> web.Response:
         return web.json_response({"error": "not found"}, status=404)
 
     app = web.Application()
     app.router.add_get("/agent/ad.json", ad_handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", port)
-    await site.start()
+    runner, endpoint = await _start_app(app)
     try:
         with pytest.raises(ClientError, match="HTTP 404"):
             await discover_service(endpoint=endpoint, ad_url=None)
@@ -321,19 +380,13 @@ async def test_discover_service_reports_non_2xx_status(aiohttp_unused_port) -> N
 
 
 @pytest.mark.asyncio
-async def test_discover_service_reports_non_json_response(aiohttp_unused_port) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
-
+async def test_discover_service_reports_non_json_response() -> None:
     async def ad_handler(request: web.Request) -> web.Response:
         return web.Response(text="not json", content_type="text/plain")
 
     app = web.Application()
     app.router.add_get("/agent/ad.json", ad_handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", port)
-    await site.start()
+    runner, endpoint = await _start_app(app)
     try:
         with pytest.raises(ClientError, match="响应不是 JSON"):
             await discover_service(endpoint=endpoint, ad_url=None)
@@ -342,21 +395,13 @@ async def test_discover_service_reports_non_json_response(aiohttp_unused_port) -
 
 
 @pytest.mark.asyncio
-async def test_discover_service_reports_malformed_json_response(
-    aiohttp_unused_port,
-) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
-
+async def test_discover_service_reports_malformed_json_response() -> None:
     async def ad_handler(request: web.Request) -> web.Response:
         return web.Response(text="{", content_type="application/json")
 
     app = web.Application()
     app.router.add_get("/agent/ad.json", ad_handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", port)
-    await site.start()
+    runner, endpoint = await _start_app(app)
     try:
         with pytest.raises(ClientError, match="响应不是 JSON"):
             await discover_service(endpoint=endpoint, ad_url=None)
@@ -365,19 +410,13 @@ async def test_discover_service_reports_malformed_json_response(
 
 
 @pytest.mark.asyncio
-async def test_discover_service_does_not_follow_redirects(aiohttp_unused_port) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
-
+async def test_discover_service_does_not_follow_redirects() -> None:
     async def redirect_handler(request: web.Request) -> web.Response:
         raise web.HTTPFound("http://example.com/agent/ad.json")
 
     app = web.Application()
     app.router.add_get("/agent/ad.json", redirect_handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", port)
-    await site.start()
+    runner, endpoint = await _start_app(app)
     try:
         with pytest.raises(ClientError, match="不支持 HTTP redirect"):
             await discover_service(endpoint=endpoint, ad_url=None)
@@ -386,11 +425,8 @@ async def test_discover_service_does_not_follow_redirects(aiohttp_unused_port) -
 
 
 @pytest.mark.asyncio
-async def test_discover_service_does_not_create_identity_files(
-    aiohttp_unused_port, client_home
-) -> None:
-    port = aiohttp_unused_port()
-    endpoint = f"http://127.0.0.1:{port}"
+async def test_discover_service_does_not_create_identity_files(client_home) -> None:
+    endpoint = ""
 
     async def ad_handler(request: web.Request) -> web.Response:
         return web.json_response(
@@ -411,10 +447,7 @@ async def test_discover_service_does_not_create_identity_files(
     app = web.Application()
     app.router.add_get("/agent/ad.json", ad_handler)
     app.router.add_get("/agent/interface.json", interface_handler)
-    runner = web.AppRunner(app)
-    await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", port)
-    await site.start()
+    runner, endpoint = await _start_app(app)
     try:
         await discover_service(endpoint=endpoint, ad_url=None)
     finally:

@@ -44,7 +44,7 @@ class ServiceInfo:
             "name": self.name,
             "rpc_endpoint": self.rpc_endpoint,
             "interface_url": self.interface_url,
-            "methods": self.methods,
+            "methods": list(self.methods),
         }
 
 
@@ -55,12 +55,19 @@ def normalize_endpoint(endpoint: str) -> str:
 
 def ensure_allowed_url(url: str) -> None:
     """只允许 loopback HTTP 与 HTTPS URL。"""
-    parsed = urlparse(url)
+    try:
+        parsed = urlparse(url)
+        host = parsed.hostname
+    except ValueError as exc:
+        raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint") from exc
     if parsed.scheme == "https":
+        if not host:
+            raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint")
         return
     if parsed.scheme != "http":
         raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint")
-    host = parsed.hostname or ""
+    if not host:
+        raise ClientError("只允许 loopback HTTP 或 HTTPS endpoint")
     if host == "localhost":
         return
     try:
@@ -88,7 +95,7 @@ async def _fetch_json(session: aiohttp.ClientSession, url: str) -> dict[str, Any
                 raise ClientError(f"响应不是 JSON: {url}") from exc
     except ClientError:
         raise
-    except aiohttp.ClientError as exc:
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
         raise ClientError(f"无法连接服务智能体: {url}") from exc
     if not isinstance(data, dict):
         raise ClientError(f"响应不是 JSON object: {url}")
@@ -110,14 +117,15 @@ def _interface_url_from_ad(ad: dict[str, Any], ad_url: str, endpoint: str) -> st
     return f"{endpoint}/agent/interface.json"
 
 
-def _rpc_endpoint_from_interface(interface_doc: dict[str, Any], endpoint: str) -> str:
-    """从 OpenRPC servers 中选择 RPC endpoint，缺失时回退到 Hermes 默认路径。"""
+def _rpc_endpoint_from_interface(interface_doc: dict[str, Any], interface_url: str) -> str:
+    """从 OpenRPC servers 中选择 RPC endpoint。"""
     servers = interface_doc.get("servers")
     if isinstance(servers, list):
         for server in servers:
             if isinstance(server, dict) and isinstance(server.get("url"), str):
-                return urljoin(endpoint + "/", server["url"])
-    return f"{endpoint}/agent/rpc"
+                return urljoin(interface_url, server["url"])
+    parsed = urlparse(interface_url)
+    return f"{parsed.scheme}://{parsed.netloc}/agent/rpc"
 
 
 def _methods_from_interface(interface_doc: dict[str, Any]) -> list[str]:
@@ -170,7 +178,7 @@ async def discover_service(
         interface_url = _interface_url_from_ad(ad, resolved_ad_url, normalized_endpoint)
         ensure_allowed_url(interface_url)
         interface_doc = await _fetch_json(session, interface_url)
-        rpc_endpoint = _rpc_endpoint_from_interface(interface_doc, normalized_endpoint)
+        rpc_endpoint = _rpc_endpoint_from_interface(interface_doc, interface_url)
         ensure_allowed_url(rpc_endpoint)
         methods = _methods_from_interface(interface_doc)
         if require_chat and "chat" not in methods:
