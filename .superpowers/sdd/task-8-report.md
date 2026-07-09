@@ -23,6 +23,10 @@
 | 自包含包边界：仓库绝对路径 | `grep -R "/home/peter/anp-hermes" -n clients/anp-client || true` | 通过：无输出。 |
 | OpenSpec task verification | `openspec instructions apply --change "add-anp-client-skill" --json` | 通过：`total: 35, complete: 35, remaining: 0`，state 为 `all_done`。 |
 | OpenSpec task 后 validate | `openspec validate add-anp-client-skill --type change`、`openspec validate --all` | 均通过；all validate 仍为 `16 passed, 0 failed`。 |
+| OpenSpec archive/sync | `openspec archive add-anp-client-skill --yes` | 通过；CLI 已同步 main specs，创建 `openspec/specs/anp-client-skill/spec.md`（`+ 11 added`），并将 change 归档为 `2026-07-09-add-anp-client-skill`。 |
+| archive 后 active changes | `openspec list --json` | 通过：`changes: []`，无 active `add-anp-client-skill`。 |
+| archive 后全量验证 | `openspec validate --all` | 通过：16 passed，0 failed；新增 `spec/anp-client-skill` 生效。 |
+| archive 路径确认 | `ls openspec/changes/archive` | 通过：存在 `openspec/changes/archive/2026-07-09-add-anp-client-skill`。 |
 
 ## 修复
 
@@ -36,10 +40,13 @@
 
 ## OpenSpec 状态
 
-- `openspec/changes/add-anp-client-skill/tasks.md` 已将 35 个任务 checkbox 标记为完成。
-- `openspec instructions apply --change "add-anp-client-skill" --json` 显示 `remaining: 0`。
-- `openspec validate add-anp-client-skill --type change` 通过。
-- `openspec validate --all` 通过：16 passed，0 failed。
+- `openspec instructions apply --change "add-anp-client-skill" --json` 在归档前显示 `remaining: 0`，state 为 `all_done`。
+- `openspec validate add-anp-client-skill --type change` 在归档前通过。
+- `openspec validate --all` 在归档前通过：16 passed，0 failed。
+- 已执行 `openspec archive add-anp-client-skill --yes`：CLI 同步 main specs，新增 `openspec/specs/anp-client-skill/spec.md`（11 条 requirement delta），并将 change 移动到归档目录。
+- 归档路径：`openspec/changes/archive/2026-07-09-add-anp-client-skill`。
+- `openspec list --json` 在归档后显示 `changes: []`，无 active `add-anp-client-skill`。
+- `openspec validate --all` 在归档后通过：16 passed，0 failed，包含新增 `spec/anp-client-skill`。
 
 ## Commit
 
@@ -49,4 +56,4 @@
 ## Concerns
 
 - 原始依赖安装命令在当前 WSL2 系统 Python 上被 PEP 668 阻止。已用临时 venv 安装同一 `requirements-dev.txt` 并完成所有 Python gate；未使用 `--break-system-packages`，没有修改系统 Python。
-- 未执行 OpenSpec archive/sync；本任务按 brief 完成质量门禁、task checkbox 与验证收尾。归档可在后续显式 archive 步骤中执行。
+- 无遗留 OpenSpec archive/sync concern：已通过 `openspec archive add-anp-client-skill --yes` 完成同步与归档，归档后 active changes 为空。
