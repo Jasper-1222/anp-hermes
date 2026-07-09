@@ -12,6 +12,14 @@ from did_identity import IdentityError, load_or_create_identity
 from did_server import is_loopback_host, serve_did_document
 
 
+def _parse_port(value: str) -> int:
+    """解析 TCP 端口号。"""
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("端口必须是整数") from exc
+
+
 def build_parser() -> argparse.ArgumentParser:
     """构造命令行参数解析器。"""
     parser = argparse.ArgumentParser(
@@ -23,7 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     serve = subcommands.add_parser("serve-did", help="启动本地 DID 文档服务")
     serve.add_argument("--host", default=os.environ.get("ANP_DID_SERVER_HOST", "127.0.0.1"))
-    serve.add_argument("--port", type=int, default=int(os.environ.get("ANP_DID_SERVER_PORT", "18900")))
+    serve.add_argument("--port", type=_parse_port, default=os.environ.get("ANP_DID_SERVER_PORT", "18900"))
     serve.add_argument("--check-only", action="store_true", help="只校验配置，不启动长驻服务")
 
     discover = subcommands.add_parser("discover", help="发现 ANP 服务智能体")

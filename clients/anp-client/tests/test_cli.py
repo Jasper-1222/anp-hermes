@@ -57,7 +57,7 @@ def test_serve_did_check_only_accepts_ipv6_loopback(client_home: Path) -> None:
     assert "serve-did 配置检查通过" in result.stdout
 
 
-def test_whoami_creates_identity(client_home: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_whoami_creates_identity(client_home: Path) -> None:
     env = {**os.environ, "ANP_CLIENT_HOME": str(client_home)}
     result = run_cli(["whoami"], env=env)
 
@@ -66,6 +66,24 @@ def test_whoami_creates_identity(client_home: Path, monkeypatch: pytest.MonkeyPa
     assert str(client_home) in result.stdout
     assert (client_home / "did.json").exists()
     assert (client_home / "private_key.pem").exists()
+
+
+def test_whoami_ignores_invalid_did_server_port(client_home: Path) -> None:
+    env = {**os.environ, "ANP_CLIENT_HOME": str(client_home), "ANP_DID_SERVER_PORT": "abc"}
+    result = run_cli(["whoami"], env=env)
+
+    assert result.returncode == 0
+    assert "个人智能体 DID:" in result.stdout
+    assert "Traceback" not in result.stderr
+
+
+def test_serve_did_check_only_rejects_invalid_env_port(client_home: Path) -> None:
+    env = {**os.environ, "ANP_CLIENT_HOME": str(client_home), "ANP_DID_SERVER_PORT": "abc"}
+    result = run_cli(["serve-did", "--check-only"], env=env)
+
+    assert result.returncode == 2
+    assert "端口必须是整数" in result.stderr
+    assert "Traceback" not in result.stderr
 
 
 def test_serve_did_rejects_non_loopback(client_home: Path) -> None:
