@@ -12,11 +12,13 @@ from dataclasses import dataclass
 from ipaddress import ip_address
 from typing import Any
 from urllib.parse import urljoin, urlparse
+from uuid import uuid4
 
 import aiohttp
 
 from did_identity import IdentityError, load_or_create_identity
 from did_server import is_loopback_host, serve_did_document
+from signing import build_signed_headers
 
 
 class ClientError(RuntimeError):
@@ -197,6 +199,109 @@ async def discover_service(
         )
 
 
+def build_chat_body(message: str, request_id: str | None = None) -> tuple[str, str]:
+    """构造 legacy params.message JSON-RPC chat body。"""
+    rpc_id = request_id or f"chat-{uuid4().hex}"
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": rpc_id,
+            "method": "chat",
+            "params": {"message": message},
+        },
+        ensure_ascii=False,
+    )
+    return body, rpc_id
+
+
+def format_rpc_error(error: dict[str, Any]) -> str:
+    """格式化 JSON-RPC error，并附加常见 DID WBA 故障提示。"""
+    code = error.get("code")
+    message = error.get("message", "未知错误")
+    lines = [f"JSON-RPC error {code}: {message}"]
+    if code == -32002:
+        lines.append(
+            "请先运行 serve-did，并在本地服务智能体设置 ANP_DID_RESOLVER_BASE_URL。"
+        )
+    elif code == -32001:
+        lines.append(
+            "请检查个人智能体 DID、私钥、签名 body 与服务端 DID 文档解析结果是否匹配。"
+        )
+    elif code == -32003:
+        lines.append("必须通过 chat 命令发送 DID WBA 签名请求，而不是裸 HTTP 请求。")
+    data = error.get("data")
+    if data is not None:
+        lines.append(f"data: {data}")
+    return "\n".join(lines)
+
+
+async def _post_chat_json(
+    session: aiohttp.ClientSession,
+    url: str,
+    body: str,
+    headers: dict[str, str],
+) -> tuple[dict[str, Any], int]:
+    """发送 chat JSON-RPC POST，并把 HTTP/JSON 错误转为 ClientError。"""
+    ensure_allowed_url(url)
+    try:
+        async with session.post(
+            url,
+            data=body,
+            headers=headers,
+            timeout=aiohttp.ClientTimeout(total=60),
+            allow_redirects=False,
+        ) as resp:
+            if 300 <= resp.status < 400:
+                raise ClientError(f"不支持 HTTP redirect: {url}")
+            if not 200 <= resp.status < 300:
+                raise ClientError(f"HTTP {resp.status}: {url}")
+            try:
+                data = await resp.json()
+            except (aiohttp.ContentTypeError, json.JSONDecodeError) as exc:
+                raise ClientError(f"响应不是 JSON: {url}") from exc
+            return data, resp.status
+    except ClientError:
+        raise
+    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
+        raise ClientError(f"无法连接服务智能体: {url}") from exc
+
+
+async def chat_service(
+    endpoint: str | None, ad_url: str | None, message: str
+) -> dict[str, Any]:
+    """发现服务智能体并发送 DID WBA 签名 chat。"""
+    identity = load_or_create_identity()
+    service = await discover_service(
+        endpoint=endpoint, ad_url=ad_url, require_chat=True
+    )
+    body, rpc_id = build_chat_body(message)
+    headers = await build_signed_headers(identity, service.rpc_endpoint, body)
+
+    async with aiohttp.ClientSession() as session:
+        response_body, http_status = await _post_chat_json(
+            session, service.rpc_endpoint, body, headers
+        )
+
+    if not isinstance(response_body, dict):
+        raise ClientError("服务智能体响应不是 JSON object")
+    if response_body.get("error") is not None:
+        error = response_body["error"]
+        if isinstance(error, dict):
+            raise ClientError(format_rpc_error(error), exit_code=1)
+        raise ClientError("服务智能体返回无法解析的 JSON-RPC error", exit_code=1)
+    result = response_body.get("result")
+    if not isinstance(result, dict) or not isinstance(result.get("response"), str):
+        raise ClientError("服务智能体响应缺少 result.response", exit_code=1)
+
+    return {
+        "service_did": service.service_did,
+        "caller_did": identity.did,
+        "http_status": http_status,
+        "jsonrpc_id": response_body.get("id", rpc_id),
+        "response": result["response"],
+    }
+
+
 def _parse_port(value: str) -> int:
     """解析 TCP 端口号。"""
     try:
@@ -277,6 +382,21 @@ async def _cmd_discover(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _cmd_chat(args: argparse.Namespace) -> int:
+    """执行 chat 子命令。"""
+    result = await chat_service(
+        endpoint=args.endpoint, ad_url=args.ad_url, message=args.message
+    )
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
+    print(f"服务 DID: {result['service_did']}")
+    print(f"个人智能体 DID: {result['caller_did']}")
+    print("\n回复:")
+    print(result["response"])
+    return 0
+
+
 def main() -> int:
     """CLI 入口。"""
     parser = build_parser()
@@ -288,6 +408,8 @@ def main() -> int:
             return asyncio.run(_cmd_serve_did(args))
         if args.command == "discover":
             return asyncio.run(_cmd_discover(args))
+        if args.command == "chat":
+            return asyncio.run(_cmd_chat(args))
         parser.error(f"命令尚未实现: {args.command}")
         return 2
     except ClientError as exc:
