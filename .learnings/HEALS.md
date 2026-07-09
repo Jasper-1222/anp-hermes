@@ -232,13 +232,14 @@ Observed:
 **Priority**: low
 
 ### Failure
-After implementing Task 5 chat helpers, the GREEN command failed:
+
+Task 5 chat helper 实现后，GREEN 命令失败：
 
 ```bash
 python3 -m pytest clients/anp-client/tests/test_chat.py -q
 ```
 
-Observed result:
+观察到结果：
 
 ```text
 1 failed, 13 passed
@@ -246,34 +247,37 @@ RuntimeError: asyncio.run() cannot be called from a running event loop
 RuntimeWarning: coroutine '_cmd_chat' was never awaited
 ```
 
-The failure came from `test_main_chat_reports_client_error_without_traceback`, which called the synchronous `anp_client.main()` function from inside a `@pytest.mark.asyncio` test.
+失败来自 `test_main_chat_reports_client_error_without_traceback`：该测试在 `@pytest.mark.asyncio` 测试函数里调用同步函数 `anp_client.main()`。
 
 ### Diagnosis
-`anp_client.main()` is intentionally synchronous and dispatches async subcommands with `asyncio.run(...)`. Marking a test that calls `main()` as async creates an already-running pytest-asyncio event loop, so `asyncio.run()` fails before exercising CLI error handling. This was a test-shape error, not a production CLI bug.
+
+`anp_client.main()` 按设计是同步 CLI 入口，并通过 `asyncio.run(...)` 分发异步子命令。把调用 `main()` 的测试标记为 async 会让 pytest-asyncio 先创建一个正在运行的事件循环，导致 `asyncio.run()` 在真正测试 CLI 错误处理前失败。这是测试形态错误，不是生产 CLI 行为缺陷。
 
 ### Fix
-Removed the async marker and async function definition from `test_main_chat_reports_client_error_without_traceback`, leaving it as a normal synchronous pytest test while still monkeypatching `chat_service` with an async fake.
+
+移除 `test_main_chat_reports_client_error_without_traceback` 的 async marker 与 async 函数定义，将其保留为普通同步 pytest 测试；测试仍然用 async fake monkeypatch `chat_service`。
 
 ### Verification
-Re-ran the original failing command:
+
+重新运行原失败命令：
 
 ```bash
 python3 -m pytest clients/anp-client/tests/test_chat.py -q
 ```
 
-Observed:
+观察到：
 
 ```text
 14 passed in 0.22s
 ```
 
-Then re-ran the requested client suite:
+随后重新运行请求的 client 测试集：
 
 ```bash
 python3 -m pytest clients/anp-client/tests -q
 ```
 
-Observed:
+观察到：
 
 ```text
 75 passed in 3.04s
@@ -299,13 +303,14 @@ Observed:
 **Priority**: low
 
 ### Failure
-The formatting check failed after implementing Task 5:
+
+Task 5 实现后，格式检查失败：
 
 ```bash
 python3 -m black --check clients/anp-client/scripts/anp_client.py clients/anp-client/scripts/signing.py clients/anp-client/tests/test_chat.py
 ```
 
-Observed:
+观察到：
 
 ```text
 would reformat clients/anp-client/tests/test_chat.py
@@ -313,17 +318,20 @@ would reformat clients/anp-client/scripts/anp_client.py
 ```
 
 ### Diagnosis
-The implementation was correct but manual edits exceeded Black line-wrapping rules in the new chat implementation/tests. Ruff and whitespace checks were clean, so the issue was formatter-only.
+
+实现逻辑正确，但手工编辑的 chat 实现/测试中有若干行超过 Black 自动换行规则。Ruff 与空白检查均干净，因此这是纯格式化问题。
 
 ### Fix
-Ran Black on the changed Python files:
+
+对变更的 Python 文件运行 Black：
 
 ```bash
 python3 -m black clients/anp-client/scripts/anp_client.py clients/anp-client/scripts/signing.py clients/anp-client/tests/test_chat.py
 ```
 
 ### Verification
-Re-ran the original formatting check and the requested tests:
+
+重新运行原格式检查与请求的测试：
 
 ```bash
 python3 -m black --check clients/anp-client/scripts/anp_client.py clients/anp-client/scripts/signing.py clients/anp-client/tests/test_chat.py
@@ -331,7 +339,7 @@ python3 -m pytest clients/anp-client/tests/test_chat.py -q
 python3 -m pytest clients/anp-client/tests -q
 ```
 
-Observed:
+观察到：
 
 ```text
 3 files would be left unchanged.

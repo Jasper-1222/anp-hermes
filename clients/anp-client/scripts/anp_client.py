@@ -253,12 +253,17 @@ async def _post_chat_json(
         ) as resp:
             if 300 <= resp.status < 400:
                 raise ClientError(f"不支持 HTTP redirect: {url}")
-            if not 200 <= resp.status < 300:
-                raise ClientError(f"HTTP {resp.status}: {url}")
             try:
                 data = await resp.json()
             except (aiohttp.ContentTypeError, json.JSONDecodeError) as exc:
+                if not 200 <= resp.status < 300:
+                    raise ClientError(f"HTTP {resp.status}: {url}") from exc
                 raise ClientError(f"响应不是 JSON: {url}") from exc
+            if not 200 <= resp.status < 300:
+                error = data.get("error") if isinstance(data, dict) else None
+                if isinstance(error, dict):
+                    raise ClientError(format_rpc_error(error), exit_code=1)
+                raise ClientError(f"HTTP {resp.status}: {url}")
             return data, resp.status
     except ClientError:
         raise
@@ -289,6 +294,10 @@ async def chat_service(
         if isinstance(error, dict):
             raise ClientError(format_rpc_error(error), exit_code=1)
         raise ClientError("服务智能体返回无法解析的 JSON-RPC error", exit_code=1)
+    if response_body.get("jsonrpc") != "2.0":
+        raise ClientError("JSON-RPC 响应 jsonrpc 必须是 2.0", exit_code=1)
+    if response_body.get("id") != rpc_id:
+        raise ClientError("JSON-RPC 响应 id 不匹配", exit_code=1)
     result = response_body.get("result")
     if not isinstance(result, dict) or not isinstance(result.get("response"), str):
         raise ClientError("服务智能体响应缺少 result.response", exit_code=1)

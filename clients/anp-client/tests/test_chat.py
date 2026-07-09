@@ -161,6 +161,139 @@ async def test_chat_service_reports_json_rpc_error(client_home) -> None:
 
 
 @pytest.mark.asyncio
+async def test_chat_service_uses_json_rpc_error_from_http_401(client_home) -> None:
+    load_or_create_identity(client_home)
+    endpoint = ""
+
+    async def ad_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "认证失败服务",
+                "did": "did:wba:localhost:agent:e1_http_401",
+                "endpoint": endpoint,
+                "interfaces": [
+                    {"type": "openrpc", "url": f"{endpoint}/agent/interface.json"}
+                ],
+            }
+        )
+
+    async def interface_handler(request: web.Request) -> web.Response:
+        return web.json_response({"openrpc": "1.3.2", "methods": [{"name": "chat"}]})
+
+    async def rpc_handler(request: web.Request) -> web.Response:
+        body = await request.json()
+        return web.json_response(
+            {
+                "jsonrpc": "2.0",
+                "id": body["id"],
+                "error": {"code": -32002, "message": "DID 文档无法解析"},
+            },
+            status=401,
+        )
+
+    app = web.Application()
+    app.router.add_get("/agent/ad.json", ad_handler)
+    app.router.add_get("/agent/interface.json", interface_handler)
+    app.router.add_post("/agent/rpc", rpc_handler)
+    runner, endpoint = await _start_app(app)
+    try:
+        with pytest.raises(ClientError) as excinfo:
+            await chat_service(endpoint=endpoint, ad_url=None, message="hello")
+    finally:
+        await runner.cleanup()
+
+    assert excinfo.value.exit_code == 1
+    assert "请先运行 serve-did" in str(excinfo.value)
+    assert "HTTP 401" not in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_chat_service_rejects_mismatched_json_rpc_id(client_home) -> None:
+    load_or_create_identity(client_home)
+    endpoint = ""
+
+    async def ad_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "错配 id 服务",
+                "did": "did:wba:localhost:agent:e1_bad_id",
+                "endpoint": endpoint,
+                "interfaces": [
+                    {"type": "openrpc", "url": f"{endpoint}/agent/interface.json"}
+                ],
+            }
+        )
+
+    async def interface_handler(request: web.Request) -> web.Response:
+        return web.json_response({"openrpc": "1.3.2", "methods": [{"name": "chat"}]})
+
+    async def rpc_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "jsonrpc": "2.0",
+                "id": "other-id",
+                "result": {"response": "不应接受"},
+            }
+        )
+
+    app = web.Application()
+    app.router.add_get("/agent/ad.json", ad_handler)
+    app.router.add_get("/agent/interface.json", interface_handler)
+    app.router.add_post("/agent/rpc", rpc_handler)
+    runner, endpoint = await _start_app(app)
+    try:
+        with pytest.raises(ClientError, match="JSON-RPC 响应 id 不匹配"):
+            await chat_service(endpoint=endpoint, ad_url=None, message="hello")
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
+async def test_chat_service_rejects_invalid_json_rpc_version(client_home) -> None:
+    load_or_create_identity(client_home)
+    endpoint = ""
+
+    async def ad_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "错版 JSON-RPC 服务",
+                "did": "did:wba:localhost:agent:e1_bad_jsonrpc",
+                "endpoint": endpoint,
+                "interfaces": [
+                    {"type": "openrpc", "url": f"{endpoint}/agent/interface.json"}
+                ],
+            }
+        )
+
+    async def interface_handler(request: web.Request) -> web.Response:
+        return web.json_response({"openrpc": "1.3.2", "methods": [{"name": "chat"}]})
+
+    async def rpc_handler(request: web.Request) -> web.Response:
+        body = await request.json()
+        return web.json_response(
+            {
+                "jsonrpc": "1.0",
+                "id": body["id"],
+                "result": {"response": "不应接受"},
+            }
+        )
+
+    app = web.Application()
+    app.router.add_get("/agent/ad.json", ad_handler)
+    app.router.add_get("/agent/interface.json", interface_handler)
+    app.router.add_post("/agent/rpc", rpc_handler)
+    runner, endpoint = await _start_app(app)
+    try:
+        with pytest.raises(ClientError, match="JSON-RPC 响应 jsonrpc 必须是 2.0"):
+            await chat_service(endpoint=endpoint, ad_url=None, message="hello")
+    finally:
+        await runner.cleanup()
+
+
+@pytest.mark.asyncio
 async def test_chat_service_reports_http_failure(client_home) -> None:
     load_or_create_identity(client_home)
 

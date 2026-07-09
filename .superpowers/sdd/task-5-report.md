@@ -46,3 +46,25 @@
 
 - 无阻塞 concerns。
 - 当前签名集成依赖本地已安装的 ANP SDK `DIDWbaAuthHeader` API；本环境已通过测试验证该 API 可用。
+
+## 修复子任务：错误响应与 JSON-RPC 响应校验
+
+### RED 失败命令 / 摘要
+
+- 命令：`python3 -m pytest /home/peter/anp-hermes/.claude/worktrees/add-anp-client-skill/clients/anp-client/tests/test_chat.py -q`
+- 结果：按预期失败，`2 failed, 14 passed`：
+  - `test_chat_service_uses_json_rpc_error_from_http_401` 失败，实际仍为 `ClientError('HTTP 401: ...')` 且 `exit_code == 2`，未显示 `format_rpc_error()` 的 DID WBA 排障提示。
+  - `test_chat_service_rejects_mismatched_json_rpc_id` 失败，成功响应 id 不匹配时未抛出 `ClientError`。
+- 追加 `jsonrpc` 版本失败测试后复跑目标测试：`2 failed, 15 passed`，剩余失败为 id 错配与 `jsonrpc != "2.0"` 未拒绝；HTTP 401 + JSON-RPC error 已转绿。
+
+### GREEN 命令 / 结果
+
+- `python3 -m pytest /home/peter/anp-hermes/.claude/worktrees/add-anp-client-skill/clients/anp-client/tests/test_chat.py -q`：`17 passed in 0.19s`
+- `python3 -m pytest /home/peter/anp-hermes/.claude/worktrees/add-anp-client-skill/clients/anp-client/tests -q`：`78 passed in 2.86s`
+- 格式化命令：`python3 -m black /home/peter/anp-hermes/.claude/worktrees/add-anp-client-skill/clients/anp-client/scripts/anp_client.py /home/peter/anp-hermes/.claude/worktrees/add-anp-client-skill/clients/anp-client/tests/test_chat.py`：`2 files left unchanged.`
+
+### 修复摘要
+
+- `_post_chat_json()` 对非 2xx RPC 响应先解析 JSON body；若 body 是 JSON-RPC error object，则通过 `format_rpc_error(error)` 抛出 `ClientError(exit_code=1)`，保留 `请先运行 serve-did` 等 DID WBA 排障提示；非 JSON-RPC error 才回退为 `HTTP {status}`。
+- `chat_service()` 在接受成功 `result` 前校验 `jsonrpc == "2.0"` 且 `id == rpc_id`，不匹配时抛出清晰 `ClientError(exit_code=1)`。
+- `.learnings/HEALS.md` 中本次 Task 5 新增的 HEAL-20260709-002/003 正文已改为中文，未改动既有非本任务条目。
