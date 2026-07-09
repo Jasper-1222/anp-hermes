@@ -355,3 +355,53 @@ python3 -m pytest clients/anp-client/tests -q
 - First-Seen / Last-Seen: 2026-07-09
 
 ---
+
+## [HEAL-20260709-001] python_test_black_formatting
+
+**Logged**: 2026-07-09T15:25:00+08:00
+**Status**: verified
+**Trigger**: tool-failure
+**Active-Context**: Task 7 integration/E2E coverage
+**Area**: tests/formatting
+**Priority**: low
+
+### Failure
+`python3 -m black --check clients/anp-client/tests/test_discovery.py clients/anp-client/tests/test_chat.py plugins/anp-agent/tests/e2e/test_anp_client_skill.py` exited 1 after adding subprocess integration tests:
+
+```text
+would reformat clients/anp-client/tests/test_chat.py
+would reformat clients/anp-client/tests/test_discovery.py
+```
+
+### Diagnosis
+The newly appended test blocks were functionally correct but not Black-formatted; the failure was formatting drift in changed test files, not a test/runtime failure.
+
+### Fix
+Ran Black on only the changed Python test files:
+
+```bash
+python3 -m black clients/anp-client/tests/test_discovery.py clients/anp-client/tests/test_chat.py plugins/anp-agent/tests/e2e/test_anp_client_skill.py
+```
+
+### Verification
+Re-ran the original formatting check and it exited 0:
+
+```text
+All done!
+3 files would be left unchanged.
+```
+
+Also re-ran the affected test suites after formatting:
+
+- `python3 -m pytest clients/anp-client/tests/test_discovery.py clients/anp-client/tests/test_chat.py -q` → 48 passed
+- `python3 -m pytest clients/anp-client/tests -q` → 85 passed
+- `cd plugins/anp-agent && python3 -m pytest tests/e2e/test_echo.py tests/e2e/test_anp_client_skill.py -v --run-e2e` → 3 passed
+
+### Metadata
+- Related Files: clients/anp-client/tests/test_discovery.py, clients/anp-client/tests/test_chat.py, plugins/anp-agent/tests/e2e/test_anp_client_skill.py
+- See Also: none
+- Pattern-Key: tests.python_black_formatting
+- Recurrence-Count: 1
+- First-Seen / Last-Seen: 2026-07-09
+
+---
