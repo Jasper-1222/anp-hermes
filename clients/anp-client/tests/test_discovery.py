@@ -8,6 +8,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 from aiohttp import web
@@ -735,3 +736,70 @@ async def test_discover_cli_json_output(aiohttp_unused_port, client_home: Path) 
     assert data["methods"] == ["chat"]
     assert not (client_home / "did.json").exists()
     assert not (client_home / "private_key.pem").exists()
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        ("http://127.0.0.1:8900", "http://localhost:8900"),
+        ("http://localhost:8900", "http://127.0.0.1:8900"),
+        ("http://[::1]:8900", "http://localhost:8900"),
+        ("http://127.0.0.1:8900/anp", "http://localhost:8900/anp"),
+    ],
+)
+def test_loopback_endpoints_equivalent_accepts_aliases(left: str, right: str) -> None:
+    assert anp_client.loopback_endpoints_equivalent(left, right)
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        ("http://127.0.0.1:8900", "http://localhost:8901"),
+        ("http://127.0.0.1:8900/anp", "http://localhost:8900"),
+        ("https://example.com", "https://other.example.com"),
+        ("http://127.0.0.1:8900", "https://localhost:8900"),
+    ],
+)
+def test_loopback_endpoints_equivalent_rejects_real_mismatch(
+    left: str, right: str
+) -> None:
+    assert not anp_client.loopback_endpoints_equivalent(left, right)
+
+
+@pytest.mark.asyncio
+async def test_discover_service_accepts_loopback_endpoint_alias() -> None:
+    requested_endpoint = ""
+    ad_endpoint = ""
+
+    async def ad_handler(request: web.Request) -> web.Response:
+        return web.json_response(
+            {
+                "protocolType": "ANP",
+                "name": "Loopback Alias 服务",
+                "did": "did:wba:localhost:agent:e1_loopback_alias",
+                "endpoint": ad_endpoint,
+                "interfaces": [
+                    {
+                        "type": "openrpc",
+                        "url": f"{requested_endpoint}/agent/interface.json",
+                    }
+                ],
+            }
+        )
+
+    async def interface_handler(request: web.Request) -> web.Response:
+        return web.json_response({"openrpc": "1.3.2", "methods": [{"name": "chat"}]})
+
+    app = web.Application()
+    app.router.add_get("/agent/ad.json", ad_handler)
+    app.router.add_get("/agent/interface.json", interface_handler)
+    runner, requested_endpoint = await _start_app(app)
+    port = urlparse(requested_endpoint).port
+    ad_endpoint = f"http://localhost:{port}"
+    try:
+        service = await discover_service(endpoint=requested_endpoint, ad_url=None)
+    finally:
+        await runner.cleanup()
+
+    assert service.service_did == "did:wba:localhost:agent:e1_loopback_alias"
+    assert service.rpc_endpoint == f"{ad_endpoint}/agent/rpc"

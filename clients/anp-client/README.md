@@ -8,6 +8,26 @@
 python3 -m pip install -r requirements.txt
 ```
 
+## 安装包态本地验证最短路径
+
+1. 在 Hermes 中安装 `anp-agent` plugin zip。
+2. 本地测试时，Hermes gateway 启动前设置：
+
+```bash
+export ANP_ALLOW_ALL_USERS=1
+export ANP_DID_RESOLVER_BASE_URL=http://127.0.0.1:18900
+```
+
+3. 在 OpenClaw 中安装 `anp-client` skill zip。
+4. 在 OpenClaw 对话中启动本地 DID 文档服务，默认监听 `127.0.0.1:18900`。
+5. 对 OpenClaw 说：
+
+```text
+通过 ANP 调用 http://localhost:8900 的服务智能体，问它“请介绍下自己”
+```
+
+如果 Hermes 已经在运行后才设置环境变量，需要重启 Hermes gateway。`localhost` 与 `127.0.0.1` 在本地同端口场景会被视为等价。
+
 ## 最小本地流程
 
 ```bash

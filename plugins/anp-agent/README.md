@@ -93,8 +93,21 @@ gateway:
 - `ANP_REQUEST_TIMEOUT`
 - `ANP_FUTURE_TTL`
 - `ANP_DID_RESOLVE_TIMEOUT`（DID 文档解析超时，默认 10 秒；非法、零值、负值回退默认值，超大值限制到 60 秒）
-- `ANP_DID_RESOLVER_BASE_URL`（仅用于本地开发、测试床与 E2E 的 loopback DID 文档服务器，例如 `http://localhost:8900`；生产环境不要依赖该变量）
-- `ANP_ALLOW_ALL_USERS`（测试环境必需）
+- `ANP_DID_RESOLVER_BASE_URL`（仅用于本地开发、测试床与 E2E 的 loopback DID 文档服务器，例如 `http://127.0.0.1:18900`；生产环境不要依赖该变量）
+- `ANP_ALLOW_ALL_USERS`（本地测试推荐 `1`，公开部署不要依赖该开关）
+
+## 本地安装包验证推荐配置
+
+通过 Hermes 对话框安装 plugin zip 后，本地测试建议在 Hermes gateway 启动前设置：
+
+```bash
+export ANP_ALLOW_ALL_USERS=1
+export ANP_DID_RESOLVER_BASE_URL=http://127.0.0.1:18900
+```
+
+`ANP_ALLOW_ALL_USERS=1` 只建议用于本地验证，可避免 OpenClaw/anp-client 每次生成临时 DID 后触发配对授权。公开部署请关闭该开关，并使用 `ANP_ALLOWED_USERS` 配置允许的调用方 DID。
+
+`ANP_DID_RESOLVER_BASE_URL` 让服务端在本地测试时通过 OpenClaw/anp-client 的 `serve-did` 解析调用方 DID 文档。该变量在 ANP 认证器初始化时读取，因此运行中的 Hermes gateway 修改环境变量不会生效，需要重启 gateway。
 
 默认情况下，运行态身份文件会写入 `~/.hermes/data/anp-agent/`，避免与插件源码或安装目录混放。若旧环境已经在其他目录生成 `did.json` 与 `private_key.pem`，可通过 `data_dir` 或 `ANP_DATA_DIR` 显式继续使用旧目录，也可在停止 Gateway 后手动迁移到新目录。本插件不会自动删除、移动或覆盖你本地已有的密钥文件。
 

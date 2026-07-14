@@ -56,6 +56,45 @@ def normalize_endpoint(endpoint: str) -> str:
     return endpoint.rstrip("/")
 
 
+def _loopback_host(host: str | None) -> bool:
+    """判断 URL hostname 是否为 loopback。"""
+    if not host:
+        return False
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def loopback_endpoints_equivalent(left: str, right: str) -> bool:
+    """判断两个 endpoint 是否为本地 loopback 等价地址。"""
+    try:
+        left_parsed = urlparse(left)
+        right_parsed = urlparse(right)
+        left_port = left_parsed.port
+        right_port = right_parsed.port
+    except ValueError:
+        return False
+
+    if left_parsed.scheme != right_parsed.scheme:
+        return False
+    if left_parsed.scheme != "http":
+        return False
+    if left_port != right_port:
+        return False
+    if (left_parsed.path.rstrip("/") or "") != (right_parsed.path.rstrip("/") or ""):
+        return False
+    if left_parsed.params or right_parsed.params:
+        return False
+    if left_parsed.query or right_parsed.query:
+        return False
+    return _loopback_host(left_parsed.hostname) and _loopback_host(
+        right_parsed.hostname
+    )
+
+
 _URL_RE = re.compile(r"https?://[^\s，,。'\"“”]+")
 _QUOTED_MESSAGE_RE = re.compile(r"[问问它]+[：:]?[“\"](?P<message>.+?)[”\"]")
 _SEND_MESSAGE_RE = re.compile(r"(?:发送|send)[：:\s]+(?P<message>.+)$", re.IGNORECASE)
@@ -216,7 +255,12 @@ async def discover_service(
             raise ClientError("Agent Description 缺少 RPC endpoint")
         ad_endpoint = normalize_endpoint(canonicalize_allowed_url(ad_endpoint))
         if normalized_endpoint and normalized_endpoint != ad_endpoint:
-            raise ClientError("Agent Description RPC endpoint 与请求 endpoint 不一致")
+            if not loopback_endpoints_equivalent(normalized_endpoint, ad_endpoint):
+                raise ClientError(
+                    "Agent Description RPC endpoint 与请求 endpoint 不一致；"
+                    "本地测试请优先使用服务端 ad.json 中声明的 endpoint，"
+                    "或确保 localhost / 127.0.0.1 使用相同端口和路径。"
+                )
         normalized_endpoint = ad_endpoint
 
         interface_url = canonicalize_allowed_url(
@@ -263,9 +307,14 @@ def format_rpc_error(error: dict[str, Any]) -> str:
     message = error.get("message", "未知错误")
     lines = [f"JSON-RPC error {code}: {message}"]
     if code == -32002:
+        lines.append("本地测试下，服务端 Hermes gateway 无法解析个人智能体 DID 文档。")
         lines.append(
-            "请先运行 serve-did，并在本地服务智能体设置 ANP_DID_RESOLVER_BASE_URL。"
+            "请先运行 serve-did，或确认 OpenClaw/anp-client 已启动 serve-did，默认地址为 http://127.0.0.1:18900。"
         )
+        lines.append("请在 Hermes gateway 启动前设置：")
+        lines.append("  ANP_DID_RESOLVER_BASE_URL=http://127.0.0.1:18900")
+        lines.append("  ANP_ALLOW_ALL_USERS=1")
+        lines.append("设置后需要重启 Hermes gateway；运行中修改环境变量不会生效。")
     elif code == -32001:
         lines.append(
             "请检查个人智能体 DID、私钥、签名 body 与服务端 DID 文档解析结果是否匹配。"
@@ -275,6 +324,24 @@ def format_rpc_error(error: dict[str, Any]) -> str:
     data = error.get("data")
     if data is not None:
         lines.append(f"data: {data}")
+    return "\n".join(lines)
+
+
+def local_response_guidance(text: str) -> str:
+    """根据 Hermes 常见本地测试回复生成下一步提示。"""
+    lines: list[str] = []
+    pairing_match = re.search(r"Pairing code:\s*([A-Z0-9]+)", text)
+    if pairing_match:
+        code = pairing_match.group(1)
+        lines.append(
+            "本地测试建议在 Hermes gateway 启动前设置 ANP_ALLOW_ALL_USERS=1 后重启，"
+            "避免每个临时 DID 都触发配对。"
+        )
+        lines.append(f"如果要保留配对流程，可运行: hermes pairing approve anp {code}")
+    if "No home channel" in text or "/sethome" in text or "home channel" in text:
+        lines.append(
+            "如 Hermes 提示未设置 home channel，请通过 ANP 发送 /sethome；本地验证通常只需执行一次。"
+        )
     return "\n".join(lines)
 
 
@@ -446,6 +513,10 @@ async def _cmd_chat(args: argparse.Namespace) -> int:
     print(f"个人智能体 DID: {result['caller_did']}")
     print("\n回复:")
     print(result["response"])
+    guidance = local_response_guidance(result["response"])
+    if guidance:
+        print("\n本地测试提示:")
+        print(guidance)
     return 0
 
 
