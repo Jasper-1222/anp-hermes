@@ -33,6 +33,19 @@ python3 -m pytest tests/ -v
 python3 -m pytest --cov=anp_agent --cov-fail-under=85 -q
 ```
 
+## 发布打包
+
+```bash
+python3 scripts/package_anp_release.py
+```
+
+脚本会生成并校验：
+
+- `dist/anp-agent-plugin-0.1.0.zip`
+- `dist/anp-client-skill-0.1.0.zip`
+
+发布包只包含 allowlist 文件，并会拒绝打包 DID 文档、私钥、缓存、pyc、本机绝对路径和真实私钥块。
+
 ## 测试
 
 ```bash
