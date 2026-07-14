@@ -6,8 +6,8 @@ kind: platform
 entrypoint: __init__.py:register
 requires_env:
   - name: ANP_ALLOW_ALL_USERS
-    description: "允许任意 DID WBA 调用方访问（测试环境必需）"
-    prompt: "允许所有 ANP 调用方？（true/false）"
+    description: "本地测试推荐 true，用于允许任意 DID WBA 调用方访问；公开部署请改为 false 并配置 ANP_ALLOWED_USERS。"
+    prompt: "本地测试请输入 true；公开部署请输入 false"
     password: false
 optional_env:
   - name: ANP_HOST
@@ -37,6 +37,10 @@ optional_env:
   - name: ANP_FUTURE_TTL
     description: "pending future 过期清理时间（默认：120）"
     prompt: "ANP future TTL"
+    password: false
+  - name: ANP_DID_RESOLVER_BASE_URL
+    description: "本地测试 DID 文档服务地址；OpenClaw/anp-client serve-did 默认值为 http://127.0.0.1:18900，需在 Hermes gateway 启动前设置。"
+    prompt: "本地 DID resolver base URL"
     password: false
   - name: ANP_ALLOWED_USERS
     description: "允许的调用方 DID 列表（逗号分隔，可选）"

@@ -78,7 +78,7 @@ def test_build_chat_body_uses_legacy_params_message() -> None:
 @pytest.mark.parametrize(
     ("code", "expected"),
     [
-        (-32002, "请先运行 serve-did"),
+        (-32002, "Hermes gateway 启动前"),
         (-32001, "检查个人智能体 DID"),
         (-32003, "必须通过 chat 命令发送 DID WBA 签名请求"),
     ],
@@ -86,6 +86,33 @@ def test_build_chat_body_uses_legacy_params_message() -> None:
 def test_format_rpc_error_guidance(code: int, expected: str) -> None:
     message = format_rpc_error({"code": code, "message": "错误"})
     assert expected in message
+
+
+def test_format_rpc_error_did_resolver_guidance_names_hermes_gateway() -> None:
+    message = format_rpc_error({"code": -32002, "message": "DID 文档无法解析"})
+
+    assert "Hermes gateway 启动前" in message
+    assert "ANP_DID_RESOLVER_BASE_URL=http://127.0.0.1:18900" in message
+    assert "ANP_ALLOW_ALL_USERS=1" in message
+    assert "重启 Hermes gateway" in message
+
+
+def test_local_response_guidance_detects_pairing_code() -> None:
+    text = "Hi~ I don't recognize you yet! Pairing code: G8T97879"
+
+    guidance = anp_client.local_response_guidance(text)
+
+    assert "ANP_ALLOW_ALL_USERS=1" in guidance
+    assert "hermes pairing approve anp G8T97879" in guidance
+
+
+def test_local_response_guidance_detects_sethome_prompt() -> None:
+    text = "No home channel is set for Anp. Type /sethome to make this chat your home channel."
+
+    guidance = anp_client.local_response_guidance(text)
+
+    assert "发送 /sethome" in guidance
+    assert "只需执行一次" in guidance
 
 
 @pytest.mark.asyncio
