@@ -133,7 +133,7 @@ plugins/anp-agent/
 
 ### 5.1 依赖方案
 
-- 插件核心使用 `anp>=0.8.8,<0.9.0`（不含 `[api]` extras），避免引入 FastAPI/OpenAI 与 Hermes 冲突。
+- 插件核心使用 `anp>=0.8.9,<0.9.0`（不含 `[api]` extras），避免引入 FastAPI/OpenAI 与 Hermes 冲突。
 - 端到端测试客户端单独使用 `anp[api]`。
 - `~/agent-network-protocol` 源码仅用于调研，不作为项目依赖。
 
@@ -231,7 +231,7 @@ plugins/anp-agent/
 | DID WBA 认证依赖调用方持有有效 DID 文档 | 测试时使用 ANP SDK 自带示例 DID，文档说明如何生成测试身份 |
 | 通用 `chat` 接口无法表达复杂工具调用 | 第一期聚焦基本对话；第二期评估将 Hermes tools 映射为 ANP 方法 |
 | 插件与 Hermes 内部 API 耦合 | 仅使用公开/稳定的适配器接口，参考 Hermes 官方插件示例 |
-| ANP SDK 版本升级导致接口变化 | 锁定主版本号 `anp>=0.8.8,<0.9.0`，CI 运行兼容性测试 |
+| ANP SDK 版本升级导致接口变化 | 锁定主版本号 `anp>=0.8.9,<0.9.0`，CI 运行兼容性测试 |
 | 依赖冲突 | 插件核心使用 `anp` 基础包，测试客户端使用 `anp[api]` |
 | Gateway allowlist 默认拒绝新平台 | 在 `plugin.yaml` 中声明 `ANP_ALLOW_ALL_USERS`，README 说明测试环境需设置 |
 | Future 残留导致内存泄漏 | 为 pending futures 设置 TTL，在 `call()` 入口清理过期项，在 `disconnect()` 中取消所有未完成 futures |

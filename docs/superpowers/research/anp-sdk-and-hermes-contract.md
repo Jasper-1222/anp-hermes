@@ -2,7 +2,7 @@
 
 > **调研目标**：在实现 `ANPAuth`（Task 6）和 `ANPAdapter`（Task 7）之前，确认 ANP Python SDK 的实际 API 用法与 Hermes `BasePlatformAdapter` 的调用契约，避免基于假设实现。
 >
-> **ANP SDK 版本**：`anp>=0.8.8,<0.9.0`（实际验证使用 `0.8.8`）
+> **ANP SDK 版本**：`anp>=0.8.9,<0.9.0`（当前依赖基线来自 `/home/peter/agent-network-protocol/anp/pyproject.toml` 的 `0.8.9`；原始调研实际验证使用 `0.8.8`）
 > **Hermes 源码**：`/home/peter/hermes-agent`（本地副本，与已安装 hermes 程序一致）
 > **调研日期**：2026-07-04
 
@@ -417,7 +417,7 @@ def register(ctx: PluginContext) -> None:
 
 **运行时间**：2026-07-04  
 **Python 版本**：3.12.3  
-**ANP SDK 版本**：`anp==0.8.8`
+**ANP SDK 版本**：历史验证使用 `anp==0.8.8`；当前项目依赖基线已更新为 `anp>=0.8.9,<0.9.0`。
 
 运行输出摘要：
 

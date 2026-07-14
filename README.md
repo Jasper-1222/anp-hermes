@@ -148,7 +148,7 @@ gateway:
 
 - 使用 ANP 原生 DID WBA 身份（`did:wba:`）。
 - 不依赖 DTR、Portal、Mediator、OpenClaw 等外部基础设施。
-- 仅依赖 ANP Python SDK（`anp>=0.8.8,<0.9.0`）和 Hermes 插件机制。
+- 仅依赖 ANP Python SDK（`anp>=0.8.9,<0.9.0`）和 Hermes 插件机制。
 - 第一期仅实现身份认证 + JSON-RPC 调用；AP2 支付与 E2EE 加密放到后续。
 - 当前实现覆盖最小 ANP/OpenANP 链路；已支持 `anp.get_capabilities` 与 `/.well-known/agent-descriptions`，并已完成插件运行时代码包化和 DID resolver 生产边界收敛。Hermes tools RPC 已实现为默认关闭的可选能力，必须通过 allowlist/denylist 与 caller DID 授权显式开启。
 

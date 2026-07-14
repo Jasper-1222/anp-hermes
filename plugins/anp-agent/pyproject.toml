@@ -27,7 +27,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "anp>=0.8.8,<0.9.0",
+    "anp>=0.8.9,<0.9.0",
     "aiohttp>=3.9.0",
     "cryptography>=42.0.0",
 ]
@@ -36,7 +36,7 @@ dependencies = [
 test = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
-    "anp[api]>=0.8.8,<0.9.0",
+    "anp[api]>=0.8.9,<0.9.0",
     "pyyaml>=6.0.0",
     "requests>=2.31.0",
 ]
