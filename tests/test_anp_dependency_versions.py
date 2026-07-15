@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from importlib.metadata import version
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -10,13 +11,11 @@ EXPECTED_ANP_DEP = "anp>=0.8.9,<0.9.0"
 EXPECTED_ANP_API_DEP = "anp[api]>=0.8.9,<0.9.0"
 
 
-def test_upstream_anp_source_version_is_current_baseline() -> None:
-    """本地上游 ANP 源码版本是本项目依赖基线。"""
-    pyproject = Path("/home/peter/agent-network-protocol/anp/pyproject.toml")
+def test_installed_anp_version_satisfies_current_baseline() -> None:
+    """当前验证环境安装的 ANP SDK 满足项目版本边界。"""
+    installed = tuple(int(part) for part in version("anp").split(".")[:3])
 
-    text = pyproject.read_text(encoding="utf-8")
-
-    assert 'version = "0.8.9"' in text
+    assert (0, 8, 9) <= installed < (0, 9, 0)
 
 
 def test_plugin_anp_dependency_uses_current_baseline() -> None:

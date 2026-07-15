@@ -9,7 +9,17 @@ from types import ModuleType
 from unittest.mock import Mock
 
 PLUGIN_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_MODULES = ["adapter", "auth", "bridge", "config", "constants", "identity", "server"]
+REPO_ROOT = PLUGIN_ROOT.parents[1]
+PACKAGER_PATH = REPO_ROOT / "scripts" / "package_anp_release.py"
+RUNTIME_MODULES = [
+    "adapter",
+    "auth",
+    "bridge",
+    "config",
+    "constants",
+    "identity",
+    "server",
+]
 FORBIDDEN_ZIP_PARTS = {
     "__pycache__",
     ".pytest_cache",
@@ -19,6 +29,16 @@ FORBIDDEN_ZIP_NAMES = {
     ".coverage",
     "did.json",
 }
+
+
+def _load_packager():
+    spec = importlib.util.spec_from_file_location("plugin_test_packager", PACKAGER_PATH)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _ensure_gateway_mocks() -> None:
@@ -99,7 +119,9 @@ def _load_plugin_entrypoint_like_hermes(
 def test_entrypoint_registers_platform_with_packaged_adapter():
     """根 entrypoint 在 Hermes package 加载语境下仍应注册 anp 平台。"""
     _ensure_gateway_mocks()
-    module = _load_plugin_entrypoint_like_hermes("hermes_plugins.anp_agent_test_register")
+    module = _load_plugin_entrypoint_like_hermes(
+        "hermes_plugins.anp_agent_test_register"
+    )
     ctx = Mock()
 
     module.register(ctx)
@@ -109,7 +131,8 @@ def test_entrypoint_registers_platform_with_packaged_adapter():
     assert kwargs["name"] == "anp"
     adapter = kwargs["adapter_factory"]({})
     assert (
-        adapter.__class__.__module__ == "hermes_plugins.anp_agent_test_register.anp_agent.adapter"
+        adapter.__class__.__module__
+        == "hermes_plugins.anp_agent_test_register.anp_agent.adapter"
     )
 
 
@@ -125,10 +148,11 @@ def test_entrypoint_does_not_insert_plugin_root_into_sys_path():
         sys.path[:] = original_path
 
 
-def test_release_zip_contains_packaged_plugin_root_only():
-    """发布 zip 应包含包化插件根目录且排除运行态与缓存文件。"""
-    zip_path = PLUGIN_ROOT / "anp-agent.zip"
-    assert zip_path.exists()
+def test_release_zip_contains_packaged_plugin_root_only(tmp_path: Path):
+    """干净 clone 中临时构建的稳定插件包结构正确。"""
+    packager = _load_packager()
+    packager.package_release(root=REPO_ROOT, dist_dir=tmp_path, version="9.9.9")
+    zip_path = tmp_path / "anp-agent.zip"
 
     with zipfile.ZipFile(zip_path) as archive:
         names = [name.rstrip("/") for name in archive.namelist()]
@@ -137,6 +161,7 @@ def test_release_zip_contains_packaged_plugin_root_only():
     assert "__init__.py" in names
     assert "README.md" in names
     assert "pyproject.toml" in names
+    assert "LICENSE" in names
     assert any(name == "anp_agent" or name.startswith("anp_agent/") for name in names)
 
     for name in names:

@@ -21,19 +21,21 @@ def _load_packager():
     return module
 
 
-def test_package_release_creates_exact_plugin_and_skill_archives(
+def test_package_release_creates_versioned_and_stable_archives(
     tmp_path: Path,
 ) -> None:
-    """打包脚本生成固定文件清单的 plugin 与 skill zip。"""
+    """打包脚本生成版本化资产、稳定别名和 LICENSE。"""
     packager = _load_packager()
 
     result = packager.package_release(root=ROOT, dist_dir=tmp_path, version="9.9.9")
 
     plugin_zip = tmp_path / "anp-agent-plugin-9.9.9.zip"
+    plugin_alias = tmp_path / "anp-agent.zip"
     skill_zip = tmp_path / "anp-client-skill-9.9.9.zip"
-    assert result == [plugin_zip, skill_zip]
-    assert plugin_zip.exists()
-    assert skill_zip.exists()
+    skill_alias = tmp_path / "anp-client.zip"
+    assert result == [plugin_zip, plugin_alias, skill_zip, skill_alias]
+    assert plugin_alias.read_bytes() == plugin_zip.read_bytes()
+    assert skill_alias.read_bytes() == skill_zip.read_bytes()
 
     with zipfile.ZipFile(plugin_zip) as archive:
         assert archive.namelist() == [
@@ -50,7 +52,9 @@ def test_package_release_creates_exact_plugin_and_skill_archives(
             "anp_agent/identity.py",
             "anp_agent/server.py",
             "anp_agent/tools.py",
+            "LICENSE",
         ]
+        assert "MIT License" in archive.read("LICENSE").decode()
         assert "本地 DID resolver base URL" in archive.read("plugin.yaml").decode()
 
     with zipfile.ZipFile(skill_zip) as archive:
@@ -62,7 +66,9 @@ def test_package_release_creates_exact_plugin_and_skill_archives(
             "scripts/did_identity.py",
             "scripts/did_server.py",
             "scripts/signing.py",
+            "LICENSE",
         ]
+        assert "MIT License" in archive.read("LICENSE").decode()
         assert (
             "loopback_endpoints_equivalent"
             in archive.read("scripts/anp_client.py").decode()

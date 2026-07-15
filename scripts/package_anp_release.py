@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shutil
 import sys
 import zipfile
 from pathlib import Path
@@ -44,8 +45,13 @@ PRIVATE_KEY_RE = re.compile(
 )
 
 
-def _write_archive(archive_path: Path, source_root: Path, files: list[str]) -> None:
-    """按固定文件清单写入 zip。"""
+def _write_archive(
+    archive_path: Path,
+    source_root: Path,
+    files: list[str],
+    license_path: Path,
+) -> None:
+    """按固定文件清单写入 zip，并在归档根加入 LICENSE。"""
     with zipfile.ZipFile(
         archive_path, "w", compression=zipfile.ZIP_DEFLATED
     ) as archive:
@@ -54,6 +60,9 @@ def _write_archive(archive_path: Path, source_root: Path, files: list[str]) -> N
             if not source.is_file():
                 raise FileNotFoundError(f"缺少发布文件: {source}")
             archive.write(source, relative)
+        if not license_path.is_file():
+            raise FileNotFoundError(f"缺少许可证文件: {license_path}")
+        archive.write(license_path, "LICENSE")
 
 
 def validate_archive(archive_path: Path) -> list[str]:
@@ -91,16 +100,32 @@ def package_release(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     plugin_zip = output_dir / f"anp-agent-plugin-{version}.zip"
+    plugin_alias = output_dir / "anp-agent.zip"
     skill_zip = output_dir / f"anp-client-skill-{version}.zip"
+    skill_alias = output_dir / "anp-client.zip"
+    license_path = repo_root / "LICENSE"
 
-    _write_archive(plugin_zip, repo_root / "plugins" / "anp-agent", PLUGIN_FILES)
-    _write_archive(skill_zip, repo_root / "clients" / "anp-client", SKILL_FILES)
+    _write_archive(
+        plugin_zip,
+        repo_root / "plugins" / "anp-agent",
+        PLUGIN_FILES,
+        license_path,
+    )
+    _write_archive(
+        skill_zip,
+        repo_root / "clients" / "anp-client",
+        SKILL_FILES,
+        license_path,
+    )
+    shutil.copyfile(plugin_zip, plugin_alias)
+    shutil.copyfile(skill_zip, skill_alias)
 
-    errors = validate_archive(plugin_zip) + validate_archive(skill_zip)
+    archives = [plugin_zip, plugin_alias, skill_zip, skill_alias]
+    errors = [error for archive in archives for error in validate_archive(archive)]
     if errors:
         raise RuntimeError("\n".join(errors))
 
-    return [plugin_zip, skill_zip]
+    return archives
 
 
 def build_parser() -> argparse.ArgumentParser:
