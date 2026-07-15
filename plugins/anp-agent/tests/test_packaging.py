@@ -119,9 +119,7 @@ def _load_plugin_entrypoint_like_hermes(
 def test_entrypoint_registers_platform_with_packaged_adapter():
     """根 entrypoint 在 Hermes package 加载语境下仍应注册 anp 平台。"""
     _ensure_gateway_mocks()
-    module = _load_plugin_entrypoint_like_hermes(
-        "hermes_plugins.anp_agent_test_register"
-    )
+    module = _load_plugin_entrypoint_like_hermes("hermes_plugins.anp_agent_test_register")
     ctx = Mock()
 
     module.register(ctx)
@@ -131,8 +129,7 @@ def test_entrypoint_registers_platform_with_packaged_adapter():
     assert kwargs["name"] == "anp"
     adapter = kwargs["adapter_factory"]({})
     assert (
-        adapter.__class__.__module__
-        == "hermes_plugins.anp_agent_test_register.anp_agent.adapter"
+        adapter.__class__.__module__ == "hermes_plugins.anp_agent_test_register.anp_agent.adapter"
     )
 
 
