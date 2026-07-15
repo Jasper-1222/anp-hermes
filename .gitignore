@@ -58,3 +58,7 @@ plugins/anp-agent/*.bak.*
 
 # SDD / superpowers scratch
 .superpowers/
+
+# Dev toolchain (not relevant to ANP community users)
+.claude/
+.learnings/
