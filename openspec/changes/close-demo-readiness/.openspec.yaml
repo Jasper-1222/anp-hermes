@@ -1,0 +1,3 @@
+schema: spec-driven
+created: 2026-07-15
+goal: 让干净 clone 可验证、master CI 可运行、发布资产与当前文档一致
