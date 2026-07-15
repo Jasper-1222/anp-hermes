@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: 技术 Demo 最低 CI 门禁
-项目 SHALL 提供 Python 3.12 单版本 GitHub Actions 门禁，并在默认分支 `master` 的 push 与 pull request 上触发。门禁 MUST 覆盖 OpenSpec、根级测试、客户端测试、插件测试、插件覆盖率、Ruff、Black 和发布包构建。
+项目 SHALL 提供 Python 3.12 单版本 GitHub Actions 门禁，并在 `master` 与 `feature/*` 分支的 push 以及以 `master` 为目标分支的 pull request 上触发。门禁 MUST 覆盖 OpenSpec、根级测试、客户端测试、插件测试、插件覆盖率、Ruff、Black 和发布包构建。
 
 #### Scenario: 默认分支触发 CI
-- **WHEN** 提交被 push 到 `master` 或 pull request 以 `master` 为目标分支
+- **WHEN** 提交被 push 到 `master` 或 `feature/*` 分支，或 pull request 以 `master` 为目标分支
 - **THEN** CI workflow 被触发
 - **AND** workflow 使用 Python 3.12
 
