@@ -349,9 +349,7 @@ def _validate_llm_e2e_prerequisites(config) -> dict[str, Any]:
     model_cfg = user_config.get("model", {})
     provider = model_cfg.get("provider", "")
     if not provider:
-        pytest.skip(
-            "真实 ~/.hermes/config.yaml 未配置 model.provider，跳过 LLM E2E 测试"
-        )
+        pytest.skip("真实 ~/.hermes/config.yaml 未配置 model.provider，跳过 LLM E2E 测试")
 
     key_env = _PROVIDER_API_KEY_ENV.get(provider.lower())
     override_key_env = os.environ.get("ANP_E2E_LLM_KEY_ENV", "")

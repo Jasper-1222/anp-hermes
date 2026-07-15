@@ -91,9 +91,22 @@ def _config(data_dir, **kwargs):
 @pytest.fixture
 def platform_config(tmp_path):
     class PlatformConfig:
-        extra = {"data_dir": str(tmp_path / "adapter")}
+        extra = {
+            "host": "127.0.0.1",
+            "port": 0,
+            "hostname": "localhost",
+            "endpoint": "http://localhost:0",
+            "data_dir": str(tmp_path / "adapter"),
+        }
 
     return PlatformConfig()
+
+
+def test_platform_config_uses_dynamic_port(platform_config):
+    """适配器连接测试不得占用默认 8900 端口。"""
+    from anp_agent.config import load_config
+
+    assert load_config(platform_config).port == 0
 
 
 @pytest.fixture

@@ -1,7 +1,6 @@
 """临时验证脚本：验证 ANP SDK DID WBA 生成、HTTP Message Signature 和 Hermes 契约。
 
 运行方式：
-    cd /home/peter/anp-hermes/.worktrees/feature-anp-agent
     python3 scripts/verify_anp_sdk.py
 
 说明：
@@ -18,7 +17,6 @@ import logging
 import tempfile
 from pathlib import Path
 
-import aiohttp
 from aiohttp import web
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -141,9 +139,7 @@ async def _main():
         # base_url_override。在测试环境中通过 monkey-patch 让它从本地服务器解析。
         original_resolve_did_wba_document = resolve_did_wba_document
 
-        async def _patched_resolve_did_wba_document(
-            did: str, verify_proof: bool = False
-        ):
+        async def _patched_resolve_did_wba_document(did: str, verify_proof: bool = False):
             return await resolve_did_document(
                 did,
                 base_url_override="http://127.0.0.1:8765",
@@ -169,15 +165,11 @@ async def _main():
                 domain="localhost",
             )
             assert result["did"] == caller_did, "验证结果 DID 不匹配"
-            assert (
-                result["auth_scheme"] == "http_signatures"
-            ), "认证方案应为 http_signatures"
+            assert result["auth_scheme"] == "http_signatures", "认证方案应为 http_signatures"
             assert "access_token" in result, "应返回 access_token"
             logger.info("DidWbaVerifier 验证成功，返回 access_token")
         finally:
-            did_wba_verifier.resolve_did_wba_document = (
-                original_resolve_did_wba_document
-            )
+            did_wba_verifier.resolve_did_wba_document = original_resolve_did_wba_document
 
         # ------------------------------------------------------------------
         # 6. 验证 Bearer token
@@ -200,13 +192,7 @@ async def _main():
     # 7. 验证 Hermes BasePlatformAdapter 契约可导入
     # ------------------------------------------------------------------
     try:
-        from gateway.platforms.base import (
-            BasePlatformAdapter,
-            MessageEvent,
-            MessageType,
-            SendResult,
-        )
-        from gateway.session import SessionSource, build_session_key
+        from gateway.platforms.base import BasePlatformAdapter
         from hermes_cli.plugins import PluginContext
 
         assert hasattr(BasePlatformAdapter, "handle_message")
