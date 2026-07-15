@@ -40,6 +40,31 @@ add-anp-client-skill
 update-anp-sdk-dependency
 close-demo-readiness
 ```
+
+## 验证记录
+
+### `close-demo-readiness`
+
+验证完成：2026-07-15。
+
+验证结果：
+
+| 检查项目 | 结果 |
+| --- | --- |
+| OpenSpec 严格校验 | 通过 |
+| OpenSpec 全量校验 | 16 passed，0 failed |
+| 根级 pytest | 11 passed |
+| 客户端 pytest | 118 passed |
+| Ruff（全部目标） | 通过 |
+| Black（根/客户端+插件分步） | 通过 |
+| 四发布资产（含 LICENSE 与稳定别名） | 通过 |
+| 插件 pytest | 136 passed，10 skipped |
+| 插件覆盖率 | 87.08%（≥ 85%） |
+| 本地无凭据 Echo E2E（--run-e2e） | 8 passed，2 skipped |
+| 真实 LLM E2E | 本轮未重新运行 |
+| git diff --check | 通过 |
+
+备注：真实 LLM E2E 在开发过程中曾用 Kimi code endpoint 验证过；本轮不要求重新运行。GitHub Actions 已配置为 `master` push/PR 单版本门禁，但本轮未推送，因此远端 Actions 尚未实际运行。
 - [x] 应用 `return-authentication-info` 成功认证响应头变更
 - [x] 同步并归档 `return-authentication-info`
 - [x] 创建 `harden-rpc-bridge` proposal/design/tasks/spec deltas

@@ -64,8 +64,8 @@ python3 scripts/package_anp_release.py
 
 ## OpenSpec 当前状态
 
-- `close-demo-readiness` 之前共有 18 个 OpenSpec 变更完成、同步并归档。
-- 当前 active changes 应为空；新工作应先创建新的 OpenSpec change。
+- 截至 2026-07-15，共 18 个 OpenSpec 变更完成、同步并归档。
+- 当前 active changes 为空。
 - main specs 当前包含 16 个 capability specs。
 - 常用命令：
 
