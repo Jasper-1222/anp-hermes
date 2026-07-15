@@ -7,6 +7,8 @@ import sys
 import zipfile
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT_PATH = ROOT / "scripts" / "package_anp_release.py"
 
@@ -73,6 +75,42 @@ def test_package_release_creates_versioned_and_stable_archives(
             "loopback_endpoints_equivalent"
             in archive.read("scripts/anp_client.py").decode()
         )
+
+
+def test_package_release_preserves_outputs_when_source_preflight_fails(
+    tmp_path: Path,
+) -> None:
+    """源文件预检失败时不得覆盖任何正式发布资产。"""
+    packager = _load_packager()
+    root = tmp_path / "repo"
+    plugin_root = root / "plugins" / "anp-agent"
+    skill_root = root / "clients" / "anp-client"
+    for relative in packager.PLUGIN_FILES:
+        source = plugin_root / relative
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text(relative, encoding="utf-8")
+    for relative in packager.SKILL_FILES:
+        source = skill_root / relative
+        source.parent.mkdir(parents=True, exist_ok=True)
+        source.write_text(relative, encoding="utf-8")
+    (root / "LICENSE").write_text("MIT License", encoding="utf-8")
+    (skill_root / packager.SKILL_FILES[-1]).unlink()
+
+    dist_dir = tmp_path / "dist"
+    dist_dir.mkdir()
+    output_names = [
+        "anp-agent-plugin-9.9.9.zip",
+        "anp-agent.zip",
+        "anp-client-skill-9.9.9.zip",
+        "anp-client.zip",
+    ]
+    for name in output_names:
+        (dist_dir / name).write_bytes(b"sentinel")
+
+    with pytest.raises(FileNotFoundError, match="缺少发布文件"):
+        packager.package_release(root=root, dist_dir=dist_dir, version="9.9.9")
+
+    assert all((dist_dir / name).read_bytes() == b"sentinel" for name in output_names)
 
 
 def test_validate_archive_rejects_runtime_identity_files(tmp_path: Path) -> None:

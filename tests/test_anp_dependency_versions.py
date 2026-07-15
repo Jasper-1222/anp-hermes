@@ -6,16 +6,36 @@ import re
 from importlib.metadata import version
 from pathlib import Path
 
+import pytest
+from packaging.version import Version
+
 ROOT = Path(__file__).resolve().parents[1]
 EXPECTED_ANP_DEP = "anp>=0.8.9,<0.9.0"
 EXPECTED_ANP_API_DEP = "anp[api]>=0.8.9,<0.9.0"
 
 
+def _anp_version_satisfies_baseline(raw: str) -> bool:
+    """按 PEP 440 判断 ANP 版本是否位于当前支持区间。"""
+    installed = Version(raw)
+    return Version("0.8.9") <= installed < Version("0.9.0")
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("0.8.9.post1", True),
+        ("0.8.9+local", True),
+        ("0.8.9rc1", False),
+    ],
+)
+def test_anp_version_baseline_uses_pep440(raw: str, expected: bool) -> None:
+    """ANP 版本边界遵循 PEP 440 的预发布与本地版本语义。"""
+    assert _anp_version_satisfies_baseline(raw) is expected
+
+
 def test_installed_anp_version_satisfies_current_baseline() -> None:
     """当前验证环境安装的 ANP SDK 满足项目版本边界。"""
-    installed = tuple(int(part) for part in version("anp").split(".")[:3])
-
-    assert (0, 8, 9) <= installed < (0, 9, 0)
+    assert _anp_version_satisfies_baseline(version("anp"))
 
 
 def test_plugin_anp_dependency_uses_current_baseline() -> None:

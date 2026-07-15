@@ -45,6 +45,20 @@ PRIVATE_KEY_RE = re.compile(
 )
 
 
+def _validate_release_sources(
+    source_root: Path,
+    files: list[str],
+    license_path: Path,
+) -> None:
+    """在写正式产物前确认固定清单与 LICENSE 均存在。"""
+    for relative in files:
+        source = source_root / relative
+        if not source.is_file():
+            raise FileNotFoundError(f"缺少发布文件: {source}")
+    if not license_path.is_file():
+        raise FileNotFoundError(f"缺少许可证文件: {license_path}")
+
+
 def _write_archive(
     archive_path: Path,
     source_root: Path,
@@ -104,16 +118,21 @@ def package_release(
     skill_zip = output_dir / f"anp-client-skill-{version}.zip"
     skill_alias = output_dir / "anp-client.zip"
     license_path = repo_root / "LICENSE"
+    plugin_root = repo_root / "plugins" / "anp-agent"
+    skill_root = repo_root / "clients" / "anp-client"
+
+    _validate_release_sources(plugin_root, PLUGIN_FILES, license_path)
+    _validate_release_sources(skill_root, SKILL_FILES, license_path)
 
     _write_archive(
         plugin_zip,
-        repo_root / "plugins" / "anp-agent",
+        plugin_root,
         PLUGIN_FILES,
         license_path,
     )
     _write_archive(
         skill_zip,
-        repo_root / "clients" / "anp-client",
+        skill_root,
         SKILL_FILES,
         license_path,
     )
