@@ -1,101 +1,198 @@
 # anp-hermes
 
-为 [ANP（Agent Network Protocol）](https://github.com/agent-network-protocol) 社区贡献的 Hermes 平台插件参考实现。
+**ANP × Hermes 技术验证 Demo**：通过 Hermes 插件机制，让 Hermes 智能体成为可被发现、认证和调用的 ANP 服务智能体。
 
-本项目通过 Hermes 的插件机制，让 Hermes 智能体能够作为 ANP 网络上的**服务智能体**被其他智能体发现和调用，且**零侵入 Hermes 核心代码**。
+本项目面向 [ANP（Agent Network Protocol）](https://github.com/agent-network-protocol) 社区，用一个可运行、可测试的端到端示例，展示 ANP 协议与真实智能体运行时 [Hermes](https://github.com/NousResearch/hermes-agent) 的交互方式。仓库同时提供 Hermes 服务端插件和 ANP 调用端 skill，方便社区成员体验从 Agent 发现、DID WBA 身份认证到 JSON-RPC 对话的完整链路。
 
-## 核心特性
+## 项目目的
 
-- **ANP 原生身份**：自动生成并持久化管理 `did:wba:` DID WBA 身份，私钥本地保管。
-- **DID WBA 认证**：使用 DID WBA HTTP Message Signatures 验证调用方身份，并在成功认证后通过 `Authentication-Info` 返回认证信息。
-- **标准 ANP 端点**：
-  - `GET /agent/ad.json` — Agent Description（直接发现入口）
-  - `GET /.well-known/agent-descriptions` — JSON-LD CollectionPage（主动发现入口）
-  - `GET /agent/interface.json` — OpenRPC 接口文档
-  - `POST /agent/rpc` — JSON-RPC 2.0 调用入口
-- **可选 Hermes tools RPC**：默认关闭；仅在显式配置 allowlist、denylist 与 caller DID 授权后，通过 `hermes.tool.<tool_name>` 暴露低风险 Hermes 工具。
-- **零侵入 Hermes**：仅通过 `BasePlatformAdapter`、`MessageEvent` 和 `ctx.register_platform()` 等公开插件接口与 Hermes 交互。
-- **高质量测试**：单元、集成与 E2E 测试覆盖核心协议路径，覆盖率 ≥ 85%，`ruff` + `black` clean。
+让 ANP 社区成员能够通过一个真实智能体运行时，直观体验 ANP 协议从服务发现、身份认证到消息调用和回复的完整过程。
 
-## 快速开始
+## 项目目标
+
+- 提供一个可以在本地运行和验证的 ANP × Hermes 交互 demo。
+- 展示真实智能体运行时如何通过插件机制接入 ANP 网络。
+- 帮助社区理解 DID WBA、Agent Description、OpenRPC 和 JSON-RPC 如何组合成完整的智能体调用链路。
+- 为其他智能体框架接入 ANP 提供可参考的实现思路。
+
+## 解决什么问题
+
+协议文档和 SDK 示例能够说明 ANP 的数据结构与接口，但要理解协议如何连接真实智能体，还需要回答几个具体问题：
+
+- Hermes 智能体如何获得并管理 ANP 原生身份？
+- 调用方如何发现一个 Hermes 服务智能体及其接口？
+- DID WBA 签名请求如何在服务端完成身份验证？
+- ANP JSON-RPC 请求如何进入 Hermes 消息处理流程？
+- Hermes 生成的回复如何返回给 ANP 调用方？
+
+`anp-hermes` 将这些环节连接为一套可直接体验的实现：
+
+| 角色 | 项目组件 | 作用 |
+| --- | --- | --- |
+| 调用方智能体 | `clients/anp-client/` | 管理调用方 DID WBA 身份，发现服务智能体并发送签名请求 |
+| 服务智能体 | `plugins/anp-agent/` | 将 Hermes 注册为 ANP 平台，提供发现、认证和 JSON-RPC 调用入口 |
+| Hermes | Agent Runtime | 接收桥接后的消息，运行智能体并生成回复 |
+
+## 交互方式
+
+```text
+用户 / 调用方智能体
+        │
+        │ 1. 通过 anp-client 发现服务智能体
+        ▼
+Agent Description / OpenRPC
+        │
+        │ 2. 使用调用方 DID WBA 身份签名请求
+        ▼
+Hermes ANP Plugin
+        │
+        │ 3. 验证身份并接收 chat JSON-RPC 请求
+        │ 4. 将请求桥接为 Hermes MessageEvent
+        ▼
+Hermes Agent Runtime
+        │
+        │ 5. 处理消息并生成回复
+        ▼
+ANP JSON-RPC Response
+```
+
+调用方也可以通过 `anp.get_capabilities` 查询服务 DID、支持的 profile、安全 profile、内容类型和调用限制。
+
+## 实现方式
+
+### Hermes 服务端插件
+
+`plugins/anp-agent/` 通过 Hermes 的公开插件接口注册 `anp` 平台，不修改 Hermes 核心代码：
+
+- 自动生成并持久化管理 `did:wba:` DID WBA 身份，私钥保存在本地数据目录。
+- 使用 DID WBA HTTP Message Signatures 验证调用方身份。
+- 通过 `BasePlatformAdapter`、`MessageEvent` 和 `ctx.register_platform()` 将 ANP 请求接入 Hermes。
+- 使用异步 bridge 关联 JSON-RPC 请求与 Hermes 回复。
+- 支持 `chat` 和 `anp.get_capabilities` 方法。
+- 可选将显式允许的低风险 Hermes tools 映射为 `hermes.tool.<tool_name>`。
+
+插件提供以下 ANP 端点：
+
+| 端点 | 用途 |
+| --- | --- |
+| `GET /agent/ad.json` | 返回 Agent Description，供已知地址的调用方直接发现 |
+| `GET /.well-known/agent-descriptions` | 返回 JSON-LD CollectionPage，供调用方按域名发现 |
+| `GET /agent/interface.json` | 返回 OpenRPC 接口文档 |
+| `GET /agent/e1_<fingerprint>/did.json` | 按 DID WBA path DID 规则提供服务 DID 文档 |
+| `POST /agent/rpc` | 接收经过 DID WBA 认证的 JSON-RPC 2.0 请求 |
+
+### ANP 调用端 skill
+
+`clients/anp-client/` 是面向个人智能体的通用调用端 skill，也可以直接通过命令行运行：
+
+- 创建并持久化调用方 DID WBA 身份。
+- 在本地提供调用方 DID 文档。
+- 从 endpoint 或 Agent Description URL 发现服务智能体。
+- 使用 DID WBA 身份签名并发送 `chat` 请求。
+- 支持把常见自然语言表达归一化为发现或调用参数。
+
+## 快速体验
+
+### 1. 获取项目并安装依赖
 
 ```bash
-# 克隆仓库
 git clone https://github.com/Jasper-1222/anp-hermes.git
 cd anp-hermes
 
-# 安装插件
+# 安装 Hermes 服务端插件及开发依赖
 cd plugins/anp-agent
 python3 -m pip install -e ".[test,dev]"
+cd ../..
 
-# 运行测试
-python3 -m pytest tests/ -v
-python3 -m pytest --cov=anp_agent --cov-fail-under=85 -q
+# 安装 ANP 调用端依赖
+python3 -m pip install -r clients/anp-client/requirements.txt
 ```
 
-## 发布打包
+完整体验建议使用 Python 3.11–3.13，并以所安装 Hermes 版本声明的 Python 要求为准。本地体验前需要已经安装并配置 Hermes。
+
+### 2. 启用 Hermes ANP 插件
+
+将插件链接到 Hermes 插件目录并启用：
 
 ```bash
-python3 scripts/package_anp_release.py
+mkdir -p ~/.hermes/plugins
+ln -s "$(pwd)/plugins/anp-agent" ~/.hermes/plugins/anp-agent
+hermes plugins enable anp-agent
 ```
 
-脚本会生成并校验：
+如果目标路径已存在，请确认它已经指向本仓库的 `plugins/anp-agent`，不要直接覆盖现有插件目录。
 
-- `dist/anp-agent-plugin-0.1.0.zip`
-- `dist/anp-client-skill-0.1.0.zip`
+在 `~/.hermes/config.yaml` 中启用 `anp` 平台：
 
-发布包只包含 allowlist 文件，并会拒绝打包 DID 文档、私钥、缓存、pyc、本机绝对路径和真实私钥块。
+```yaml
+plugins:
+  enabled:
+    - anp-agent
 
-## 测试
-
-```bash
-cd plugins/anp-agent
-
-# 单元测试与集成测试
-python3 -m pytest tests/ -v
-
-# 覆盖率检查（要求 ≥ 85%）
-python3 -m pytest --cov=anp_agent --cov-fail-under=85 -q
-
-# 阶段一：确定性 Echo E2E（本地 mock LLM，无需真实 API key，不依赖真实 ~/.hermes/config.yaml）
-python3 -m pytest tests/e2e/test_echo.py -v --run-e2e
-
-# 阶段二：真实 LLM E2E（慢速，可选）
-# 需要 ~/.hermes/config.yaml 中配置 model.provider，并设置对应 provider 的 API key 环境变量
-python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
-
-# 也可临时覆盖 provider，不修改 ~/.hermes/config.yaml
-ANP_E2E_LLM_PROVIDER="kimi" \
-ANP_E2E_LLM_API="https://api.kimi.com/coding/v1" \
-ANP_E2E_LLM_KEY_ENV="KIMI_API_KEY" \
-python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
-```
-
-## 本地启动 Hermes + ANP 插件
-
-```bash
-# 将插件链接到 Hermes 插件目录
-ln -s $(pwd)/plugins/anp-agent ~/.hermes/plugins/anp-agent
-
-# 在 ~/.hermes/config.yaml 中启用 anp 平台
-cat >> ~/.hermes/config.yaml <<EOF
 gateway:
   platforms:
     anp:
+      enabled: true
       extra:
-        host: 0.0.0.0
+        host: 127.0.0.1
         port: 8900
         hostname: localhost
         endpoint: http://localhost:8900
-EOF
-
-# 启动 gateway（测试环境需设置 ANP_ALLOW_ALL_USERS=1）
-ANP_ALLOW_ALL_USERS=1 hermes run
 ```
 
-插件启动后会自动生成 DID WBA 身份并监听 `http://localhost:8900`。默认情况下，DID 文档与私钥 PEM 写入 `~/.hermes/data/anp-agent/`；如需复用旧身份，可在 `gateway.platforms.anp.extra.data_dir` 或 `ANP_DATA_DIR` 中显式指定旧目录。
+### 3. 启动调用方 DID 文档服务
 
-如需让 ANP 调用方直接调用 Hermes tools，可在 `gateway.platforms.anp.extra.tool_rpc` 中显式开启。该能力默认关闭，且必须配置 caller DID 与工具 allowlist；内置 denylist 会拒绝 shell、代码执行、文件写入、skill 管理、浏览器自动化和外部发布等高风险工具：
+打开一个终端：
+
+```bash
+cd clients/anp-client
+python3 scripts/anp_client.py whoami
+python3 scripts/anp_client.py serve-did
+```
+
+调用方 DID 文档服务默认监听 `127.0.0.1:18900`。
+
+### 4. 启动 Hermes 服务智能体
+
+回到仓库根目录，在另一个终端中启动 Hermes：
+
+```bash
+ANP_ALLOW_ALL_USERS=1 \
+ANP_DID_RESOLVER_BASE_URL=http://127.0.0.1:18900 \
+hermes gateway run
+```
+
+插件启动后会生成 Hermes 服务智能体的 DID WBA 身份，并在 `http://localhost:8900` 提供 ANP 服务。
+
+### 5. 发现并调用 Hermes 智能体
+
+在第三个终端中运行：
+
+```bash
+cd clients/anp-client
+
+# 发现服务智能体
+python3 scripts/anp_client.py discover --endpoint http://127.0.0.1:8900
+
+# 发送 DID WBA 签名 chat 请求
+python3 scripts/anp_client.py chat \
+  --endpoint http://127.0.0.1:8900 \
+  --message "请介绍下自己"
+```
+
+这条调用会依次经过服务发现、DID WBA 签名、服务端身份认证、JSON-RPC bridge 和 Hermes 消息处理流程，最终返回 Hermes 智能体的回复。
+
+也可以直接查看公开描述：
+
+```bash
+curl http://127.0.0.1:8900/agent/ad.json
+curl http://127.0.0.1:8900/.well-known/agent-descriptions
+curl http://127.0.0.1:8900/agent/interface.json
+```
+
+## 可选 Hermes tools RPC
+
+服务端插件可以把显式允许的 Hermes tool 暴露为 `hermes.tool.<tool_name>` JSON-RPC 方法。该能力默认关闭；启用时需要同时配置调用方 DID 和工具 allowlist：
 
 ```yaml
 gateway:
@@ -114,51 +211,115 @@ gateway:
           max_result_bytes: 65536
 ```
 
-生产部署时，不应依赖 `ANP_DID_RESOLVER_BASE_URL` 才能解析服务 DID。DID WBA 默认解析规则会把 `did:wba:{domain}:agent:e1_<fingerprint>` 解析到 `https://{domain}/agent/e1_<fingerprint>/did.json`；因此生产环境应通过 HTTPS 反向代理或标准端口让该 path 可公开访问。`ANP_DID_RESOLVER_BASE_URL` 仅用于本地开发、测试床和 E2E 的 loopback DID 文档服务器。
+插件使用 denylist、参数校验、调用超时和结果大小限制约束工具调用，并默认拒绝 shell、代码执行、文件写入、skill 管理、浏览器自动化和外部发布等高风险工具。代码支持注入审计回调，当前默认配置不持久化审计记录。
 
-> 运行态身份文件（如 `did.json`、`*.pem`）不应放入源码目录。本仓库会忽略 `plugins/anp-agent/` 下误生成的身份文件，但不会自动删除或迁移你本地已有的密钥文件；如需清理或迁移，请先确认目标目录与备份。
+## 测试与验证
+
+### Hermes 服务端插件
+
+插件完整测试包含发布 zip 结构检查。从干净 clone 运行测试前，先在仓库根目录构建发布包并准备测试使用的稳定文件名：
+
+```bash
+python3 scripts/package_anp_release.py
+cp dist/anp-agent-plugin-0.1.0.zip plugins/anp-agent/anp-agent.zip
+cd plugins/anp-agent
+
+# 单元测试与集成测试
+python3 -m pytest tests/ -q
+
+# 覆盖率检查（要求 ≥ 85%）
+python3 -m pytest --cov=anp_agent --cov-fail-under=85 -q
+
+# 格式与 lint
+ruff check .
+black --check .
+
+# 确定性 Echo E2E：使用本地 mock LLM，无需真实 API key
+python3 -m pytest tests/e2e/test_echo.py -v --run-e2e
+
+# 真实 LLM E2E：使用 Hermes 配置的 provider，满足前置条件时运行
+python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
+```
+
+真实 LLM E2E 需要 `~/.hermes/config.yaml` 中存在 `model.provider`，并设置对应 provider 的 API key 环境变量。也可以通过以下环境变量临时覆盖本次测试使用的 provider 参数，而不修改配置文件；临时覆盖仍要求配置文件中存在 `model.provider`：
+
+```bash
+ANP_E2E_LLM_PROVIDER="kimi" \
+ANP_E2E_LLM_API="https://api.kimi.com/coding/v1" \
+ANP_E2E_LLM_KEY_ENV="KIMI_API_KEY" \
+python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
+```
+
+### ANP 调用端 skill
+
+```bash
+cd clients/anp-client
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest tests/ -q
+ruff check .
+black --check .
+```
+
+## 发布打包
+
+从仓库根目录运行：
+
+```bash
+python3 scripts/package_anp_release.py
+```
+
+脚本会生成并校验：
+
+- `dist/anp-agent-plugin-0.1.0.zip`
+- `dist/anp-client-skill-0.1.0.zip`
+
+发布包由固定文件 allowlist 构建，并会检查归档条目中的运行态 DID 文件、PEM/pyc 后缀、缓存目录、已知本机路径引用和私钥块。
+
+## 数据与本地测试配置
+
+- Hermes 服务智能体的 DID 文档和私钥默认写入 `~/.hermes/data/anp-agent/`，也可以通过 `gateway.platforms.anp.extra.data_dir` 或 `ANP_DATA_DIR` 指定目录。
+- ANP 调用端身份默认写入 `~/.anp-client/`。
+- `ANP_ALLOW_ALL_USERS=1` 用于本地体验时允许新生成的调用方 DID 直接访问 Hermes。
+- `ANP_DID_RESOLVER_BASE_URL` 用于本地开发、测试床和 E2E 中的 loopback DID 文档服务，并在 Hermes 认证器初始化时读取。
+- 运行态 `did.json`、`*.pem` 和其他身份文件不应写入或提交到源码目录。
 
 ## 仓库结构
 
-```
+```text
 .
-├── plugins/anp-agent/      # Hermes ANP 平台插件
-│   ├── __init__.py         # Hermes 插件入口（注册 anp 平台）
-│   ├── plugin.yaml         # Hermes 插件元数据
-│   ├── pyproject.toml      # Python 包与测试配置
-│   ├── anp_agent/          # 插件运行时 Python 包
-│   │   ├── adapter.py      # Hermes 平台适配器
-│   │   ├── auth.py         # DID WBA 认证
-│   │   ├── bridge.py       # ANP JSON-RPC ↔ Hermes 桥接
-│   │   ├── config.py       # 配置加载
-│   │   ├── identity.py     # DID WBA 身份管理
-│   │   ├── server.py       # aiohttp HTTP 端点
-│   │   └── tools.py        # 可选 Hermes tool RPC 策略与执行
-│   ├── tests/              # 单元、集成与 E2E 测试
-│   └── README.md           # 插件详细说明
-├── docs/                    # 当前实现分析、OpenSpec 路线图与执行状态
-├── openspec/               # OpenSpec 规划产物
-│   ├── specs/              # 当前 capability spec
-│   └── changes/            # 活跃变更与 archive/ 已归档变更
-├── CLAUDE.md               # 项目开发指南
+├── plugins/anp-agent/       # Hermes ANP 服务端平台插件
+│   ├── anp_agent/           # 插件运行时 Python 包
+│   ├── tests/               # 单元、集成与 E2E 测试
+│   ├── plugin.yaml          # Hermes 插件元数据
+│   └── README.md            # 插件安装与配置说明
+├── clients/anp-client/      # 个人智能体侧 ANP 调用 skill
+│   ├── scripts/             # 身份、DID 文档服务、发现与调用脚本
+│   ├── tests/               # 调用端测试
+│   └── SKILL.md             # skill 定义与自然语言调用样例
+├── scripts/                 # 发布包构建与校验脚本
+├── docs/                    # 实现分析与演进记录
+├── openspec/                # capability specs 与归档变更
+├── CLAUDE.md                # 项目开发指南
 └── .github/workflows/ci.yml # CI 配置
 ```
 
-## 设计约束
+## 设计原则
 
 - 使用 ANP 原生 DID WBA 身份（`did:wba:`）。
-- 不依赖 DTR、Portal、Mediator、OpenClaw 等外部基础设施。
-- 仅依赖 ANP Python SDK（`anp>=0.8.9,<0.9.0`）和 Hermes 插件机制。
-- 第一期仅实现身份认证 + JSON-RPC 调用；AP2 支付与 E2EE 加密放到后续。
-- 当前实现覆盖最小 ANP/OpenANP 链路；已支持 `anp.get_capabilities` 与 `/.well-known/agent-descriptions`，并已完成插件运行时代码包化和 DID resolver 生产边界收敛。Hermes tools RPC 已实现为默认关闭的可选能力，必须通过 allowlist/denylist 与 caller DID 授权显式开启。
+- 仅通过 ANP Python SDK 与 Hermes 公开插件机制完成集成。
+- 保持 Hermes 核心代码零侵入，使插件能够独立安装和发布。
+- 以身份认证、Agent 发现和 JSON-RPC 调用组成清晰、可复现的体验链路。
+- Hermes tools RPC 作为显式授权后启用的可选扩展示例。
 
-## 贡献
+## 社区参与
 
-欢迎为 ANP 社区贡献改进！请确保：
+欢迎 ANP 社区成员运行和体验这个 demo，并围绕 DID WBA、Agent 发现、OpenRPC、JSON-RPC、ANP Core Binding 以及真实智能体运行时接入方式提出反馈和改进建议。
 
-1. 测试通过：`python3 -m pytest tests/ -q` 与 `python3 -m pytest --cov=anp_agent --cov-fail-under=85 -q`
-2. Lint 通过：`ruff check .` 和 `black --check .`
-3. 提交信息使用中文，遵循项目约定。
+提交改进前请确保：
+
+1. Hermes 服务端插件和 ANP 调用端测试通过。
+2. `ruff check .` 与 `black --check .` 通过。
+3. 提交信息和项目文档使用中文。
 
 ## 许可证
 
