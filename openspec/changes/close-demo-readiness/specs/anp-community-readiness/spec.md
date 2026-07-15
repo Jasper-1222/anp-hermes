@@ -20,7 +20,7 @@
 - **AND** `expose-hermes-tools` 的完成内容包含 tool RPC 默认关闭、allowlist/denylist、caller DID 授权、OpenRPC/capabilities/discovery 集成、RPC route 与归档证据
 
 ### Requirement: 文档事实一致性审计
-项目 SHALL 对根 README、插件 README、CLAUDE.md、执行状态、路线图、实现分析和 main specs 执行事实一致性审计，确保它们对 ANP × Hermes 技术验证 Demo 定位、当前能力、插件包路径、默认 data dir、resolver loopback override 边界、tool RPC 默认关闭、测试命令、发布资产、LICENSE、默认审计 sink、OpenSpec 状态和已完成待办的描述一致。
+项目 SHALL 对根 README、插件 README、CLAUDE.md、执行状态、路线图、实现分析和 main specs 执行事实一致性审计，确保它们对 ANP × Hermes 技术验证 Demo 定位、当前能力、插件包路径、默认 data dir、resolver loopback override 边界、tool RPC 默认关闭、测试命令、发布资产、LICENSE、默认审计 sink、OpenSpec 状态和已完成待办的描述一致，并且不得引用已过期的 active change、旧模块路径或已完成待办。
 
 #### Scenario: 主要文档一致
 - **WHEN** 开发者阅读根 README、插件 README、CLAUDE.md、执行状态文档、路线图、当前实现分析和 main specs
