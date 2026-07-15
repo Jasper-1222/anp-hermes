@@ -1,10 +1,28 @@
 # ANP Hermes OpenSpec 执行状态
 
-日期：2026-07-08
+日期：2026-07-15
 
 ## 当前状态
 
-前十个 OpenSpec 变更已完成并归档：
+`close-demo-readiness` 之前共有 18 个 OpenSpec 变更完成、同步并归档，覆盖初始插件、对话框安装、E2E、认证错误、Top 10 收口、社区就绪审计、ANP client skill 和 ANP SDK 0.8.9 基线更新。close-demo-readiness 已完成技术 Demo 的社区 README、master CI、最低质量门禁、MIT LICENSE、双发布资产和文档事实一致性收口。
+
+当前 active changes 为空。
+
+状态：前 18 个路线图变更已完成并归档。项目可保持技术 Demo 状态供社区体验；P2 和生产化能力不属于本轮完成条件。
+
+## 用户约定
+
+- 后续使用 opsx 技能顺序推进：`/opsx:propose` → `/opsx:apply` → 验证 → `/opsx:archive`。
+- OpenSpec CLI 可由助手按技能要求直接执行。
+- 所有文档、规格、提交信息继续使用中文。
+
+## 当前 active change
+
+无。`close-demo-readiness` 已完成技术 Demo 的社区 README、master CI、最低质量门禁、MIT LICENSE、双发布资产和文档事实一致性收口。
+
+## 已归档变更完成摘要
+
+以下 18 个 OpenSpec 变更已完成、同步并归档：
 
 ```text
 reconcile-anp-spec-docs
@@ -17,42 +35,11 @@ harden-test-harness
 package-anp-plugin
 productionize-did-resolver
 expose-hermes-tools
-```
-
-当前 active change：
-
-```text
 review-community-readiness
+add-anp-client-skill
+update-anp-sdk-dependency
+close-demo-readiness
 ```
-
-状态：前十个路线图变更已完成并归档。当前正在执行 `review-community-readiness` 收尾审计变更，用于更新分析报告、路线图和文档一致性，并运行社区就绪验证矩阵。`expose-hermes-tools` 已完成实现、验证、main specs 同步与归档，归档目录为 `openspec/changes/archive/2026-07-08-expose-hermes-tools/`。
-
-## 用户约定
-
-- 后续使用 opsx 技能顺序推进：`/opsx:propose` → `/opsx:apply` → 验证 → `/opsx:archive`。
-- OpenSpec CLI 可由助手按技能要求直接执行。
-- 所有文档、规格、提交信息继续使用中文。
-
-## 当前 active change
-
-```text
-review-community-readiness
-```
-
-状态：`review-community-readiness` apply 进行中。目标是把文档从“执行中路线图”收口为“社区参考实现候选”状态，复核 README、插件 README、CLAUDE.md、main specs 与执行状态文档，并记录社区就绪验证矩阵。
-
-## 已完成
-
-- [x] 输出当前实现综合分析报告：`docs/anp-hermes-current-implementation-analysis.md`
-- [x] 保存长期路线图：`docs/anp-hermes-openspec-roadmap.md`
-- [x] 初始化执行状态文件：`docs/anp-hermes-openspec-execution-state.md`
-- [x] 创建 `reconcile-anp-spec-docs` proposal/design/tasks/spec deltas
-- [x] 应用 `reconcile-anp-spec-docs` 文档与规格清理
-- [x] 归档 `reconcile-anp-spec-docs`
-- [x] 创建 `protect-anp-runtime-secrets` proposal/design/tasks/spec deltas
-- [x] 应用 `protect-anp-runtime-secrets` 运行态密钥保护变更
-- [x] 同步并归档 `protect-anp-runtime-secrets`
-- [x] 创建 `return-authentication-info` proposal/design/tasks/spec deltas
 - [x] 应用 `return-authentication-info` 成功认证响应头变更
 - [x] 同步并归档 `return-authentication-info`
 - [x] 创建 `harden-rpc-bridge` proposal/design/tasks/spec deltas

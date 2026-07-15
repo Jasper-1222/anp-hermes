@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working in this repository. Keep
 
 ## 项目目标
 
-本项目目标是为 ANP（Agent Network Protocol）社区贡献一个高质量 Hermes 接入参考实现：通过 Hermes 插件机制，让 Hermes 智能体作为 ANP 网络上的服务智能体被发现和调用。
+本项目目标是为 ANP（Agent Network Protocol）社区贡献一个高质量 Hermes 接入参考实现：通过 Hermes 插件机制，让 Hermes 智能体作为 ANP 网络上的服务智能体被发现和调用。本轮完成技术 Demo P0/P1 收口；不以生产部署、限流、持久化审计或跨机器 DID 托管为目标。
 
 硬约束：
 - 使用 ANP 原生 DID WBA 身份（`did:wba:`）。
@@ -20,6 +20,9 @@ This file provides guidance to Claude Code when working in this repository. Keep
 ## 常用命令
 
 ```bash
+# 仓库根级依赖与发布测试
+python3 -m pytest tests/ -q
+
 # 插件开发目录
 cd plugins/anp-agent
 
@@ -33,9 +36,10 @@ python3 -m pytest tests/test_server.py -v
 # 覆盖率门槛：≥ 85%
 python3 -m pytest --cov=anp_agent --cov-fail-under=85 -q
 
-# 格式与 lint
-ruff check .
-black --check .
+# 格式与 lint（根/客户端与插件分开运行）
+ruff check plugins/anp-agent clients/anp-client
+cd plugins/anp-agent && black --check .
+black --check clients/anp-client
 
 # E2E：本地 mock LLM，无真实 API key
 python3 -m pytest tests/e2e/test_echo.py -v --run-e2e
@@ -48,15 +52,21 @@ ANP_E2E_LLM_PROVIDER="kimi" \
 ANP_E2E_LLM_API="https://api.kimi.com/coding/v1" \
 ANP_E2E_LLM_KEY_ENV="KIMI_API_KEY" \
 python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
-```
 
-真实 LLM E2E 已用 Kimi code endpoint 验证过。不要把 API key 写入仓库、CLAUDE.md 或 README；临时 key 优先通过安全环境变量或 `/tmp` 600 权限文件注入，跑完删除并轮换。
+# ANP 调用端 skill
+python3 -m pytest clients/anp-client/tests/ -q
+ruff check clients/anp-client
+black --check clients/anp-client
+
+# 构建版本化包与稳定别名
+python3 scripts/package_anp_release.py
+```
 
 ## OpenSpec 当前状态
 
-- 前 11 个变更已完成、同步并归档：从 `reconcile-anp-spec-docs` 到 `review-community-readiness`。
+- `close-demo-readiness` 之前共有 18 个 OpenSpec 变更完成、同步并归档。
 - 当前 active changes 应为空；新工作应先创建新的 OpenSpec change。
-- main specs 已包含 `anp-community-readiness`，用于记录社区就绪收尾契约。
+- main specs 当前包含 16 个 capability specs。
 - 常用命令：
 
 ```bash
@@ -88,6 +98,9 @@ openspec validate --all
 .
 ├── CLAUDE.md                 # 本文件
 ├── README.md                 # 项目总览与快速开始
+├── clients/anp-client/       # ANP 调用端 skill：身份、DID 服务、发现与签名 chat
+├── scripts/                  # SDK 验证与 plugin/client 发布包构建
+├── tests/                    # 根级依赖和发布包测试
 ├── docs/                     # 当前实现分析、OpenSpec 路线图与执行状态
 ├── openspec/                 # OpenSpec 辅助规划工具目录（非业务实现）
 │   ├── config.yaml

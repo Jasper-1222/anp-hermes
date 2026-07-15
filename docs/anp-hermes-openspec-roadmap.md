@@ -1,7 +1,7 @@
 # ANP Hermes OpenSpec 开发路线图
 
 日期：2026-07-08  
-状态：前十个 OpenSpec 变更已完成并归档；当前进入社区就绪收尾审计阶段  
+状态：初始能力、Top 10、社区就绪审计、ANP client skill、发布打包和 ANP SDK 0.8.9 基线均已完成；技术 Demo P0/P1 收口已完成。
 参考分析：`docs/anp-hermes-current-implementation-analysis.md`
 
 ## 总体原则
@@ -14,7 +14,7 @@
 先校准规格 → 再修 P0 正确性 → 再补 ANP 互通 → 再做工程化重构 → 最后做能力扩展
 ```
 
-当前重点从“补功能”切换为“社区贡献前收尾”：文档事实一致、验证矩阵稳定、下一阶段 backlog 清晰。
+当前重点从”补功能”切换为”社区贡献前收尾”：文档事实一致、验证矩阵稳定、Demo 可保留当前状态供社区体验。
 
 ## 已完成变更顺序
 
@@ -165,104 +165,30 @@
 - 更新 OpenRPC、Agent Description、`anp.get_capabilities` 和 `/agent/rpc` 路由。
 - 保持高风险工具默认拒绝，且 tool RPC 失败不附带成功认证 `Authentication-Info`。
 
-## 当前收尾变更
+## 已完成变更摘要
 
-### `review-community-readiness`
+以下 18 个 OpenSpec 变更已完成、同步并归档：
 
-性质：社区贡献前收尾审计  
-状态：active / apply 中
-
-目标：
-
-- 更新当前实现分析报告，把已完成事项从待办口吻改为当前能力。
-- 更新本路线图，标记前十个变更已完成，并整理下一阶段 backlog。
-- 复核 README、插件 README、CLAUDE.md、执行状态文档和 main specs 的事实一致性。
-- 运行社区就绪验证矩阵。
-- 新增并同步 `anp-community-readiness` spec，记录社区就绪检查契约。
-
-## 社区就绪验证矩阵
-
-必须通过：
-
-```bash
-openspec validate --all
-
-cd plugins/anp-agent
-python3 -m pytest tests/ -q
-python3 -m pytest --cov=anp_agent --cov-fail-under=85 -q
-ruff check .
-black --check .
-python3 -m pytest tests/e2e/test_echo.py -v --run-e2e
+```text
+reconcile-anp-spec-docs
+protect-anp-runtime-secrets
+return-authentication-info
+harden-rpc-bridge
+support-anp-core-binding
+expand-agent-discovery
+harden-test-harness
+package-anp-plugin
+productionize-did-resolver
+expose-hermes-tools
+review-community-readiness
+add-anp-client-skill
+update-anp-sdk-dependency
+close-demo-readiness
 ```
 
-条件验证：
+## 当前不实施范围
 
-```bash
-python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
-```
-
-真实 LLM E2E 依赖 `~/.hermes/config.yaml` 中的 provider 和对应 API key。缺少配置或密钥时，应记录为条件未执行或按预期 skip。
-
-## 下一阶段 backlog
-
-前十个路线图变更已完成。后续建议继续小步 OpenSpec 化，不把多个方向混在一个大变更里。
-
-### 1. `document-production-deployment`
-
-目标：产出生产部署指南。
-
-建议覆盖：
-
-- HTTPS 反向代理。
-- DID WBA path DID 路由。
-- Hermes gateway systemd/docker 启动方式。
-- `ANP_ALLOW_ALL_USERS` 测试开关禁用说明。
-- tool RPC allowlist 审批建议。
-- 日志、备份、密钥轮换。
-
-### 2. `verify-bearer-token-followup`
-
-目标：完整验收 `Authentication-Info` 后续 Bearer token 流程。
-
-建议覆盖：
-
-- 首次 HTTP Message Signature 请求返回 token。
-- 后续 Bearer token 请求通过。
-- token 过期、无效或缺失时返回安全错误或 challenge。
-- 与 ANP SDK middleware 行为对齐。
-
-### 3. `upstream-anp-resolver-injection`
-
-目标：为 ANP Python SDK 上游 resolver injection 能力做准备。
-
-建议覆盖：
-
-- 梳理当前插件 resolver wrapper 的约束。
-- 对照 ANP SDK resolver 入口。
-- 形成上游 issue / PR 设计草案。
-- 保持插件本地 loopback override 兼容。
-
-### 4. `add-rate-limit-and-audit-sinks`
-
-目标：加强公开服务时的运行时防护。
-
-建议覆盖：
-
-- per-DID rate limit。
-- tool RPC 并发上限。
-- 结构化审计日志落盘或外部 sink。
-- 敏感参数和结果的红action策略。
-
-### 5. `add-community-client-examples`
-
-目标：降低社区复现成本。
-
-建议覆盖：
-
-- 最小 Python 客户端示例。
-- discovery 示例。
-- DID WBA 签名调用示例。
-- `chat`、`anp.get_capabilities` 和可选 `hermes.tool.*` 调用示例。
+本项目当前以技术 Demo 为完成目标。生产部署、Bearer 后续请求、per-DID 限流、持久化审计、resolver 上游改造、跨机器 DID 托管、AP2 和 E2EE 保留为可选后续主题，不属于本轮完成条件。
 
 ## 上下文恢复说明
 
@@ -271,5 +197,4 @@ python3 -m pytest tests/e2e/test_llm.py -v --run-e2e --run-slow-e2e
 1. `docs/anp-hermes-openspec-execution-state.md`
 2. `docs/anp-hermes-openspec-roadmap.md`
 3. `docs/anp-hermes-current-implementation-analysis.md`
-4. 当前 active change 的 `proposal.md`、`design.md`、`tasks.md`、`specs/**/spec.md`
-5. 当前 change 涉及的实现文件和测试文件
+4. `CLAUDE.md`

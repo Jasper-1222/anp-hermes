@@ -1,7 +1,8 @@
 # anp-client-skill Specification
 
 ## Purpose
-TBD - created by archiving change add-anp-client-skill. Update Purpose after archive.
+
+定义可独立安装的 ANP 调用端 skill，使个人智能体能够管理 DID WBA 身份、在本地提供 DID 文档、发现 ANP 服务智能体并发送签名 `chat` 请求，同时约束 endpoint 安全、安装包边界和第一期非目标。
 ## Requirements
 ### Requirement: 自包含 ANP 客户端 skill
 系统 SHALL 提供一个可独立安装的 `anp-client` skill，使个人智能体能够作为 ANP 调用方发现并调用服务智能体。该 skill 的发布目录 SHALL 包含 `SKILL.md`、运行脚本和依赖说明，且不得依赖仓库外相对软链接或本机绝对路径。
