@@ -93,101 +93,36 @@ ANP JSON-RPC Response
 
 ## 快速体验
 
-### 1. 获取项目并安装依赖
+### Hermes 安装插件
+
+在 Hermes 对话框中发送：
+
+```text
+安装插件 https://github.com/Jasper-1222/anp-hermes/releases/latest/download/anp-agent.zip
+```
+
+或在本地手动安装：
 
 ```bash
 git clone https://github.com/Jasper-1222/anp-hermes.git
-cd anp-hermes
-
-# 安装 Hermes 服务端插件及开发依赖
-cd plugins/anp-agent
-python3 -m pip install -e ".[test,dev]"
-cd ../..
-
-# 安装 ANP 调用端依赖
-python3 -m pip install -r clients/anp-client/requirements.txt
+ln -s "$(pwd)/anp-hermes/plugins/anp-agent" ~/.hermes/plugins/anp-agent
 ```
 
-完整体验建议使用 Python 3.11–3.13，并以所安装 Hermes 版本声明的 Python 要求为准。本地体验前需要已经安装并配置 Hermes。
+在 `~/.hermes/config.yaml` 中启用 `anp` 平台并重启 gateway 即可。
 
-### 2. 启用 Hermes ANP 插件
+### OpenClaw / WorkBuddy 安装 skill
 
-将插件链接到 Hermes 插件目录并启用：
+在对话框中发送：
 
-```bash
-mkdir -p ~/.hermes/plugins
-ln -s "$(pwd)/plugins/anp-agent" ~/.hermes/plugins/anp-agent
-hermes plugins enable anp-agent
+```text
+安装 skill https://github.com/Jasper-1222/anp-hermes/releases/latest/download/anp-client.zip
 ```
 
-如果目标路径已存在，请确认它已经指向本仓库的 `plugins/anp-agent`，不要直接覆盖现有插件目录。
+安装后即可通过自然语言发现和调用 ANP 服务智能体，例如：
 
-在 `~/.hermes/config.yaml` 中启用 `anp` 平台：
-
-```yaml
-plugins:
-  enabled:
-    - anp-agent
-
-gateway:
-  platforms:
-    anp:
-      enabled: true
-      extra:
-        host: 127.0.0.1
-        port: 8900
-        hostname: localhost
-        endpoint: http://localhost:8900
-```
-
-### 3. 启动调用方 DID 文档服务
-
-打开一个终端：
-
-```bash
-cd clients/anp-client
-python3 scripts/anp_client.py whoami
-python3 scripts/anp_client.py serve-did
-```
-
-调用方 DID 文档服务默认监听 `127.0.0.1:18900`。
-
-### 4. 启动 Hermes 服务智能体
-
-回到仓库根目录，在另一个终端中启动 Hermes：
-
-```bash
-ANP_ALLOW_ALL_USERS=1 \
-ANP_DID_RESOLVER_BASE_URL=http://127.0.0.1:18900 \
-hermes gateway run
-```
-
-插件启动后会生成 Hermes 服务智能体的 DID WBA 身份，并在 `http://localhost:8900` 提供 ANP 服务。
-
-### 5. 发现并调用 Hermes 智能体
-
-在第三个终端中运行：
-
-```bash
-cd clients/anp-client
-
-# 发现服务智能体
-python3 scripts/anp_client.py discover --endpoint http://127.0.0.1:8900
-
-# 发送 DID WBA 签名 chat 请求
-python3 scripts/anp_client.py chat \
-  --endpoint http://127.0.0.1:8900 \
-  --message "请介绍下自己"
-```
-
-这条调用会依次经过服务发现、DID WBA 签名、服务端身份认证、JSON-RPC bridge 和 Hermes 消息处理流程，最终返回 Hermes 智能体的回复。
-
-也可以直接查看公开描述：
-
-```bash
-curl http://127.0.0.1:8900/agent/ad.json
-curl http://127.0.0.1:8900/.well-known/agent-descriptions
-curl http://127.0.0.1:8900/agent/interface.json
+```text
+发现 http://localhost:8900 上的 ANP 服务智能体
+通过 ANP 问它"你好，请介绍下自己"
 ```
 
 ## 可选 Hermes tools RPC
