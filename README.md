@@ -217,11 +217,9 @@ gateway:
 
 ### Hermes 服务端插件
 
-插件完整测试包含发布 zip 结构检查。从干净 clone 运行测试前，先在仓库根目录构建发布包并准备测试使用的稳定文件名：
+插件普通测试会在临时目录构建并检查发布 zip，因此干净 clone 不需要预先准备 ignored `anp-agent.zip`：
 
 ```bash
-python3 scripts/package_anp_release.py
-cp dist/anp-agent-plugin-0.1.0.zip plugins/anp-agent/anp-agent.zip
 cd plugins/anp-agent
 
 # 单元测试与集成测试
@@ -270,10 +268,12 @@ python3 scripts/package_anp_release.py
 
 脚本会生成并校验：
 
-- `dist/anp-agent-plugin-0.1.0.zip`
-- `dist/anp-client-skill-0.1.0.zip`
+- `dist/anp-agent-plugin-0.1.0.zip` — 版本化 Hermes 插件包
+- `dist/anp-agent.zip` — 稳定插件别名
+- `dist/anp-client-skill-0.1.0.zip` — 版本化客户端 skill 包
+- `dist/anp-client.zip` — 稳定客户端别名
 
-发布包由固定文件 allowlist 构建，并会检查归档条目中的运行态 DID 文件、PEM/pyc 后缀、缓存目录、已知本机路径引用和私钥块。
+稳定别名与对应版本化资产内容相同。两个逻辑发布包都包含仓库根 MIT `LICENSE`；发布包由固定文件 allowlist 构建，并会检查运行态 DID 文件、PEM/pyc 后缀、缓存目录、已知本机路径引用和私钥块。
 
 ## 数据与本地测试配置
 
@@ -323,4 +323,4 @@ python3 scripts/package_anp_release.py
 
 ## 许可证
 
-MIT
+[MIT](LICENSE)
