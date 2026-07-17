@@ -58,6 +58,15 @@ ANP JSON-RPC Response
 
 调用方也可以通过 `anp.get_capabilities` 查询服务 DID、支持的 profile、安全 profile、内容类型和调用限制。
 
+## 架构
+
+详细架构图见 [docs/diagrams/](docs/diagrams/)：
+
+- [组件架构](docs/diagrams/01-component-architecture.md) — 三层组件（Client / ANP Plugin / Hermes Core）及其数据流关系
+- [端到端调用时序](docs/diagrams/02-e2e-call-sequence.md) — 从发现、认证到 JSON-RPC 响应的 7 阶段完整序列
+- [错误路径全景](docs/diagrams/03-error-paths.md) — 各阶段 14 种错误码与速查表
+- [Tool RPC 安全架构](docs/diagrams/04-tool-rpc-architecture.md) — 五层纵深防御策略
+
 ## 实现方式
 
 ### Hermes 服务端插件
@@ -124,6 +133,8 @@ ln -s "$(pwd)/anp-hermes/plugins/anp-agent" ~/.hermes/plugins/anp-agent
 发现 http://localhost:8900 上的 ANP 服务智能体
 通过 ANP 问它"你好，请介绍下自己"
 ```
+
+更完整的分步演练请参考 [Demo 演练脚本](docs/demo-walkthrough.md)。
 
 ## 可选 Hermes tools RPC
 
