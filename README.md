@@ -134,7 +134,7 @@ ln -s "$(pwd)/anp-hermes/plugins/anp-agent" ~/.hermes/plugins/anp-agent
 通过 ANP 问它"你好，请介绍下自己"
 ```
 
-更完整的分步演练请参考 [Demo 演练脚本](docs/demo-walkthrough.md)。
+更完整的分步演练请参考 [Demo 演练脚本](docs/demo-walkthrough.md)。向社区演示时，可参考 [社区演示主持指南](docs/community-demo-guide.md)（15 分钟分幕脚本）。
 
 ## 可选 Hermes tools RPC
 
