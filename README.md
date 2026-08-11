@@ -1,19 +1,8 @@
 # anp-hermes
 
-**ANP × Hermes 技术验证 Demo**：通过 Hermes 插件机制，让 Hermes 智能体成为可被发现、认证和调用的 ANP 服务智能体。
+**ANP × Hermes 技术验证 Demo**：通过 Hermes 插件机制，让 Hermes 智能体成为可被发现、认证和调用的 ANP 服务智能体，为其他智能体框架接入 ANP 提供可参考的实现样板。
 
-本项目面向 [ANP（Agent Network Protocol）](https://github.com/agent-network-protocol) 社区，用一个可运行、可测试的端到端示例，展示 ANP 协议与真实智能体运行时 [Hermes](https://github.com/NousResearch/hermes-agent) 的交互方式。仓库同时提供 Hermes 服务端插件和 ANP 调用端 skill，方便社区成员体验从 Agent 发现、DID WBA 身份认证到 JSON-RPC 对话的完整链路。
-
-## 项目目的
-
-让 ANP 社区成员能够通过一个真实智能体运行时，直观体验 ANP 协议从服务发现、身份认证到消息调用和回复的完整过程。
-
-## 项目目标
-
-- 提供一个可以在本地运行和验证的 ANP × Hermes 交互 demo。
-- 展示真实智能体运行时如何通过插件机制接入 ANP 网络。
-- 帮助社区理解 DID WBA、Agent Description、OpenRPC 和 JSON-RPC 如何组合成完整的智能体调用链路。
-- 为其他智能体框架接入 ANP 提供可参考的实现思路。
+本项目面向 [ANP（Agent Network Protocol）](https://github.com/agent-network-protocol) 社区——ANP 是智能体之间发现、认证与调用的开放协议，相当于智能体世界的"互联网协议层"。本项目用一个可运行、可测试的端到端示例，展示 ANP 协议与真实智能体运行时 [Hermes](https://github.com/NousResearch/hermes-agent) 的交互方式。仓库同时提供 Hermes 服务端插件和 ANP 调用端 skill，方便社区成员体验从 Agent 发现、DID WBA 身份认证到 JSON-RPC 对话的完整链路。
 
 ## 解决什么问题
 
@@ -32,6 +21,13 @@
 | 调用方智能体 | `clients/anp-client/` | 管理调用方 DID WBA 身份，发现服务智能体并发送签名请求 |
 | 服务智能体 | `plugins/anp-agent/` | 将 Hermes 注册为 ANP 平台，提供发现、认证和 JSON-RPC 调用入口 |
 | Hermes | Agent Runtime | 接收桥接后的消息，运行智能体并生成回复 |
+
+## 项目目标
+
+- 提供一个可以在本地运行和验证的 ANP × Hermes 交互 demo，让社区成员直观体验从服务发现、身份认证到消息调用和回复的完整链路。
+- 展示真实智能体运行时如何通过插件机制接入 ANP 网络。
+- 帮助社区理解 DID WBA、Agent Description、OpenRPC 和 JSON-RPC 如何组合成完整的智能体调用链路。
+- 为其他智能体框架接入 ANP 提供可参考的实现思路。
 
 ## 交互方式
 
