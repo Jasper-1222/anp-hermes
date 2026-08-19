@@ -34,7 +34,8 @@
 
 使用 [组件架构图](diagrams/01-component-architecture.md)（建议提前渲染为 PNG 放入幻灯片），按两条线讲：
 
-- **调用线**：蓝色调用方（anp-client：身份 + 签名）→ 橙色服务端插件（anp-agent：5 条路由 + 认证 + 桥接）→ 绿色 Hermes Core（消息管道 + LLM）
+- **调用线**：蓝色调用方（anp-client：身份 + 签名 + 本地 DID 文档服务）→ 橙色服务端插件（anp-agent：5 条路由 + 认证 + 桥接）→ 绿色 Hermes Core（消息管道 + LLM）
+- **认证支线**：服务端认证时向调用方 DID 文档服务取公钥验章——本地由 `serve-did` 提供，生产按 DID WBA HTTPS 规则从公开地址解析
 - **返回线**：回复 → bridge 回写 → JSON-RPC 响应
 - **落点（社区价值）**："整个插件**零侵入** Hermes 核心代码，走公开插件接口——这就是给其他智能体框架的接入样板。"
 
