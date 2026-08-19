@@ -110,7 +110,7 @@ curl -s http://127.0.0.1:18900/agent/e1_B8xK2mP9vR4q/did.json | python3 -m json.
 }
 ```
 
-> **设计原理**：DID WBA 解析默认通过 HTTPS `{hostname}/.well-known/did.json` 路径获取 DID 文档。本地测试中，`localhost` 没有公共 DNS，所以通过 `ANP_DID_RESOLVER_BASE_URL` 指向本地 DID 文档服务。该覆盖仅接受 loopback 地址，生产环境不依赖此机制。
+> **设计原理**：DID WBA 解析默认按 HTTPS 规则获取 DID 文档（如 `https://{hostname}/agent/e1_<fingerprint>/did.json`）。本地测试中 `localhost` 没有公共 DNS 和 TLS，所以通过 `ANP_DID_RESOLVER_BASE_URL` 指向本地 DID 文档服务。该覆盖仅接受 loopback 地址，生产环境不依赖此机制。
 
 ---
 
@@ -239,21 +239,7 @@ python3 clients/anp-client/scripts/anp_client.py chat \
 标准的服务发现和 JSON-RPC 调用接口...
 ```
 
-> **设计原理**：完整链路回溯（详见[端到端调用时序图](diagrams/02-e2e-call-sequence.md)）：
->
-> 1. **加载身份** — 从 `~/.anp-client/` 读取 DID 文档和 Ed25519 私钥
-> 2. **构造 JSON-RPC body** — `{"jsonrpc":"2.0","method":"chat","params":{"message":"你好..."},"id":"chat-<uuid>"}`
-> 3. **DID WBA 签名** — 使用 `DIDWbaAuthHeader` 对请求方法、路径、Content-Type、Content-Digest 签名
-> 4. **POST 请求** — 携带 `Signature` 和 `Signature-Input` 头发送到 `/agent/rpc`
-> 5. **服务端认证** — `ANPAuth.authenticate()` 解析调用方 DID → 获取 DID 文档 → 验证签名和 proof
-> 6. **桥接 Hermes** — `ANPBridge.call()` 创建 `asyncio.Future`，构造 `MessageEvent` 注入 Hermes 消息流
-> 7. **LLM 处理** — Hermes 核心运行 LLM 推理并生成回复
-> 8. **结果返回** — `ANPAdapter.send()` 通过 `bridge.set_result()` 完成 Future，构造 JSON-RPC 响应
->
-> 关键设计点：
-> - 客户端 JSON-RPC `id`（如 `chat-<uuid>`）与服务端内部 `request_id`（如 `req-1`）隔离，避免并发冲突
-> - `chat_id` 格式为 `anp:req-N`，`adapter.send()` 解析此前缀将回复路由回正确的 Future
-> - `asyncio.shield()` 保护 Future 防止外部 CancelledError 污染内部 pending 状态
+> **设计原理**：这一步走完时序图的"四站路"（详见[端到端调用时序图](diagrams/02-e2e-call-sequence.md)）——客户端从 `~/.anp-client/` 加载身份，用私钥对请求签名（覆盖请求方法、路径、Content-Type、Content-Digest）；服务端解析调用方 DID 文档拿到公钥验章；随后请求桥接为 Hermes 消息，LLM 回复原路封装为 JSON-RPC result 返回。篡改签名覆盖的任何一项都会验签失败（见下方错误演示 2）。
 
 ---
 
@@ -357,9 +343,8 @@ curl -s -X POST http://127.0.0.1:8900/agent/rpc \
 同时服务端返回 HTTP 401。
 
 > **设计原理**：
-> - `-32003` 由 `auth.py:_classify_verifier_error()` 根据 `DidWbaVerifierError` 的异常消息分类生成
-> - 请求缺少 `Signature` 或 `Signature-Input` 头时触发
-> - HTTP 401 响应中可能附带 `WWW-Authenticate` 和 `Accept-Signature` challenge 头（当签名头存在但格式错误时），但完全缺失时不附带
+> - 服务端按失败原因细分认证错误码（`-32001` 签名无效 / `-32002` DID 无法解析 / `-32003` 缺少认证头），完整对照见[错误路径全景](diagrams/03-error-paths.md)
+> - 仅当签名头存在但格式错误时，响应才附带 `WWW-Authenticate` / `Accept-Signature` challenge 头；完全缺失时不附带
 
 ---
 
@@ -637,9 +622,9 @@ rm -rf ~/.hermes/data/anp-agent/
 
 ### 架构图索引
 
-- [组件架构图](diagrams/01-component-architecture.md) — 三层组件关系与数据流
+- [组件架构图](diagrams/01-component-architecture.md) — 调用方、调用方 DID 文档服务、服务端插件、Hermes Core 的关系与数据流
 - [端到端调用时序图](diagrams/02-e2e-call-sequence.md) — 服务发现 + 四站路调用序列
-- [错误路径全景](diagrams/03-error-paths.md) — 14 种错误码与触发条件
+- [错误路径全景](diagrams/03-error-paths.md) — 全链路错误码与触发条件速查
 - [Tool RPC 安全架构](diagrams/04-tool-rpc-architecture.md) — 五层纵深防御
 
 ### 完整配置参考

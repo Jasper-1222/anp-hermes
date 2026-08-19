@@ -53,7 +53,7 @@ ANP JSON-RPC Response
 
 - [组件架构](docs/diagrams/01-component-architecture.md) — 调用方、调用方 DID 文档服务、服务端插件、Hermes Core 的关系与数据流
 - [端到端调用时序](docs/diagrams/02-e2e-call-sequence.md) — 服务发现 + 四站路调用序列
-- [错误路径全景](docs/diagrams/03-error-paths.md) — 各阶段 14 种错误码与速查表
+- [错误路径全景](docs/diagrams/03-error-paths.md) — 各阶段错误码与速查表
 - [Tool RPC 安全架构](docs/diagrams/04-tool-rpc-architecture.md) — 五层纵深防御策略
 
 ## 实现方式
