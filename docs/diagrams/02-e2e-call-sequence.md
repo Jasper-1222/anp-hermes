@@ -3,88 +3,49 @@
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Caller as 调用方<br/>(anp-client)
-    participant Server as ANP Server<br/>(server.py)
-    participant Auth as ANPAuth<br/>(auth.py)
-    participant Bridge as ANPBridge<br/>(bridge.py)
-    participant Adapter as ANPAdapter<br/>(adapter.py)
-    participant Hermes as Hermes Core
+    participant Caller as 调用方<br/>（ANP Client）
+    participant DID as 调用方 DID 文档服务<br/>（serve-did）
+    participant Plugin as Hermes ANP Plugin<br/>（服务端插件）
+    participant Hermes as Hermes Agent Core
 
-    %% ===== 阶段 1：服务发现 =====
     rect rgb(227, 242, 253, 0.4)
-        Note over Caller,Server: 阶段 1 — 服务发现
-        Caller->>Server: GET /agent/ad.json
-        Server-->>Caller: 200 Agent Description<br/>{did, endpoint, security, interfaces}
-        Caller->>Server: GET /agent/interface.json
-        Server-->>Caller: 200 OpenRPC<br/>{methods: [chat, anp.get_capabilities, ...]}
-        Caller->>Caller: 验证 protocolType=ANP<br/>提取 rpc_endpoint
+        Note over Caller,Plugin: 服务发现
+        Caller->>Plugin: GET /agent/ad.json、/agent/interface.json
+        Plugin-->>Caller: Agent Description + OpenRPC
     end
 
-    %% ===== 阶段 2：调用准备 =====
     rect rgb(255, 243, 224, 0.4)
-        Note over Caller: 阶段 2 — 调用准备（客户端本地）
-        Caller->>Caller: 加载调用方身份<br/>(did.json + private_key.pem)
-        Caller->>Caller: 构造 JSON-RPC body<br/>{"jsonrpc":"2.0","method":"chat",<br/>"params":{"message":"你好"},"id":"abc-123"}
-        Caller->>Caller: DID WBA 签名<br/>DIDWbaAuthHeader.get_auth_header()<br/>→ Signature + Signature-Input 头
+        Note over Caller,Plugin: 第 1 站 — 私钥盖章
+        Caller->>Caller: 加载身份，对请求做 DID WBA 签名
+        Caller->>Plugin: POST /agent/rpc（带签名）
     end
 
-    %% ===== 阶段 3：RPC 请求 =====
-    rect rgb(232, 245, 233, 0.4)
-        Note over Caller,Server: 阶段 3 — JSON-RPC 请求
-        Caller->>Server: POST /agent/rpc<br/>headers: Signature, Signature-Input<br/>body: {"jsonrpc":"2.0","method":"chat",...}
-        Server->>Server: _parse_rpc_request()<br/>校验 jsonrpc/id/method/params
-    end
-
-    %% ===== 阶段 4：身份认证 =====
     rect rgb(243, 229, 245, 0.4)
-        Note over Server,Auth: 阶段 4 — DID WBA 身份认证
-        Server->>Auth: authenticate(method, url, headers, body)
-        Auth->>Auth: DidWbaVerifier.verify_request()
-        Auth->>Auth: 1. 解析调用方 DID
-        Auth->>Auth: 2. 通过 resolve_did_wba_document()<br/>获取调用方 DID Document
-        Auth->>Auth: 3. 验证 HTTP Message Signature
-        Auth->>Auth: 4. 验证 proof + binding
-        Auth-->>Server: AuthenticationResult<br/>{caller_did, headers(Authentication-Info)}
+        Note over DID,Plugin: 第 2 站 — 解析 DID 验章
+        Plugin->>DID: 获取调用方 DID 文档
+        DID-->>Plugin: did.json（公钥）
+        Plugin->>Plugin: 验证签名，确认调用方身份
     end
 
-    %% ===== 阶段 5：桥接 =====
-    rect rgb(255, 235, 238, 0.4)
-        Note over Server,Bridge: 阶段 5 — JSON-RPC 桥接
-        Server->>Bridge: bridge.call(rpc_id, method, params, caller_did)
-        Bridge->>Bridge: 生成内部 request_id = "req-1"
-        Bridge->>Bridge: 创建 asyncio.Future<br/>存入 _pending["req-1"]
-        Bridge->>Bridge: 构造 MessageEvent<br/>{text, message_id, source, metadata}
-        Bridge->>Adapter: handle_message(event)
+    rect rgb(232, 245, 233, 0.4)
+        Note over Plugin,Hermes: 第 3 站 — 桥接为 Hermes 消息
+        Plugin->>Hermes: 消息桥接
+        Hermes->>Hermes: LLM 推理（可能调用 skills / tools）
     end
 
-    %% ===== 阶段 6：LLM 处理 =====
-    rect rgb(255, 248, 225, 0.4)
-        Note over Adapter,Hermes: 阶段 6 — Hermes 消息处理
-        Adapter->>Hermes: BasePlatformAdapter.handle_message()
-        Hermes->>Hermes: 会话管理 + LLM 推理
-        Note right of Hermes: 可能涉及<br/>skills / tools 调用
-        Hermes->>Adapter: send(chat_id="anp:req-1", content)
-    end
-
-    %% ===== 阶段 7：响应回传 =====
     rect rgb(227, 242, 253, 0.4)
-        Note over Adapter,Caller: 阶段 7 — 响应回传
-        Adapter->>Bridge: set_result("req-1", content)
-        Bridge->>Bridge: Future.set_result(content)<br/>清理 _pending["req-1"]
-        Bridge-->>Server: 返回结果文本
-        Server->>Server: 构造 JSON-RPC result<br/>{"result":{"response":"..."}}
-        Server-->>Caller: HTTP 200<br/>{"jsonrpc":"2.0","id":"abc-123",<br/>"result":{"response":"你好！我是..."}}
+        Note over Caller,Hermes: 第 4 站 — 原路返回
+        Hermes-->>Plugin: LLM 回复
+        Plugin-->>Caller: JSON-RPC result
     end
-
-    %% ===== 设计要点注释 =====
-    Note over Caller,Hermes: 关键设计点：<br/>1. chat_id 格式 "anp:req-N" — Adapter.send() 解析此前缀路由回对应 Future<br/>2. 客户端 JSON-RPC id 与服务端内部 request_id 隔离<br/>3. bridge.call() 使用 asyncio.shield() 防止外部取消污染内部状态<br/>4. 请求超时由 asyncio.wait_for() 保护，超时后清理 pending entry
 ```
 
-**阶段说明**：
-1. **服务发现**（步骤 1-3）— 调用方获取 Agent Description 和 OpenRPC，了解服务能力和接口
-2. **调用准备**（步骤 4-5）— 客户端本地加载身份、构造请求、生成 DID WBA 签名
-3. **JSON-RPC 请求**（步骤 6-7）— 签名请求到达服务端，首先做格式校验
-4. **身份认证**（步骤 8-15）— 解析 DID 文档、验证签名和 proof，提取 caller DID
-5. **桥接**（步骤 16-21）— 创建 Future、构造 MessageEvent、注入 Hermes 消息流
-6. **LLM 处理**（步骤 22-25）— Hermes 核心消息处理管道（可能涉及 skills/tools）
-7. **响应回传**（步骤 26-31）— Future 完成、构造 JSON-RPC 结果、返回调用方
+**阶段说明**（与社区演示的"四站路"口径一致）：
+
+- **服务发现** — 调用方拿到名片（Agent Description）和说明书（OpenRPC），了解服务能力与接口
+- **第 1 站：私钥盖章** — 客户端本地加载身份，用私钥对请求签名（HTTP Message Signatures）
+- **第 2 站：解析 DID 验章** — 服务端从调用方 DID 文档服务取到公钥，验证签名、确认调用方身份
+- **第 3 站：桥接** — 请求翻译成 Hermes 消息，进入核心处理管道，LLM 生成回复
+- **第 4 站：原路返回** — 回复经桥接层回传，封装为 JSON-RPC result 返回调用方
+
+注：本地测试中"调用方 DID 文档服务"即 `anp-client serve-did`（默认 `127.0.0.1:18900`）；生产环境按 DID WBA HTTPS 规则从调用方公开地址解析。实现细节（内部 request_id、超时与并发保护等）见 `plugins/anp-agent/anp_agent/` 源码。

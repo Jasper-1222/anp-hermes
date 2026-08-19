@@ -638,7 +638,7 @@ rm -rf ~/.hermes/data/anp-agent/
 ### 架构图索引
 
 - [组件架构图](diagrams/01-component-architecture.md) — 三层组件关系与数据流
-- [端到端调用时序图](diagrams/02-e2e-call-sequence.md) — 7 阶段完整调用序列
+- [端到端调用时序图](diagrams/02-e2e-call-sequence.md) — 服务发现 + 四站路调用序列
 - [错误路径全景](diagrams/03-error-paths.md) — 14 种错误码与触发条件
 - [Tool RPC 安全架构](diagrams/04-tool-rpc-architecture.md) — 五层纵深防御
 
